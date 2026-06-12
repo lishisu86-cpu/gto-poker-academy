@@ -1,0 +1,358 @@
+/* --- Simulator CSS (Virtual Table, Seatings, Poker Cards) --- */
+
+.simulator-container {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 1100px) {
+  .simulator-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Poker Felt Table Layout --- */
+.table-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.8 / 1;
+  background: radial-gradient(circle, #1e3a2e 0%, #0d1e16 80%);
+  border: 15px solid #1c1511; /* Wood rim */
+  border-radius: 200px;
+  box-shadow: 
+    inset 0 10px 40px rgba(0,0,0,0.8),
+    0 15px 35px rgba(0,0,0,0.6);
+  padding: 2rem;
+  margin-top: 2.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.table-outer-rim {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  right: -15px;
+  bottom: -15px;
+  border: 2px solid rgba(255,255,255,0.05);
+  border-radius: 200px;
+  pointer-events: none;
+  box-shadow: 0 0 25px rgba(0,255,157,0.05);
+}
+
+/* Inner Felt Line */
+.table-inner-felt {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  border: 2px solid rgba(255,255,255,0.03);
+  border-radius: 190px;
+  pointer-events: none;
+}
+
+/* Center Logo/Branding on table */
+.table-logo {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1rem, 2vw, 1.8rem);
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.05);
+  text-transform: uppercase;
+  user-select: none;
+}
+
+/* --- Community Cards Layout --- */
+.community-cards-container {
+  display: flex;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 4px 10px rgba(0,0,0,0.5);
+  z-index: 5;
+}
+
+.pot-display {
+  position: absolute;
+  bottom: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--accent-green);
+  box-shadow: 0 0 10px rgba(0,255,157,0.2);
+  color: var(--accent-green);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 0.25rem 1rem;
+  border-radius: 20px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* --- Player Seat Positions --- */
+/* Placing 9 seats in an ellipse around the table */
+.player-seat {
+  position: absolute;
+  width: 110px;
+  height: 120px;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+  transition: all var(--transition-normal);
+}
+
+/* Seat Coordinate Map for 9 positions */
+.player-seat[data-seat="0"] { top: 88%; left: 50%; }  /* Hero (Bottom Center) */
+.player-seat[data-seat="1"] { top: 78%; left: 20%; }  /* Bottom Left */
+.player-seat[data-seat="2"] { top: 50%; left: 10%; }  /* Middle Left */
+.player-seat[data-seat="3"] { top: 22%; left: 20%; }  /* Top Left */
+.player-seat[data-seat="4"] { top: 12%; left: 40%; }  /* Top Mid-Left */
+.player-seat[data-seat="5"] { top: 12%; left: 60%; }  /* Top Mid-Right */
+.player-seat[data-seat="6"] { top: 22%; left: 80%; }  /* Top Right */
+.player-seat[data-seat="7"] { top: 50%; left: 90%; }  /* Middle Right */
+.player-seat[data-seat="8"] { top: 78%; left: 80%; }  /* Bottom Right */
+
+/* Player Info Card UI */
+.seat-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-glass);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  height: 100%;
+  padding: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.seat-card:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.player-seat.empty .seat-card {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.1);
+  backdrop-filter: none;
+  justify-content: center;
+}
+
+.empty-seat-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  gap: 0.25rem;
+}
+
+.empty-seat-placeholder svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* Active Player Glow Ring */
+.player-seat.active .seat-card {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 15px var(--accent-green-glow);
+}
+
+/* Player Info Fields */
+.seat-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8rem;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seat-chips {
+  color: var(--accent-green);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.seat-action-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.seat-action-label.raise { background: var(--gto-raise-bg); color: var(--gto-raise); }
+.seat-action-label.call { background: var(--gto-call-bg); color: var(--gto-call); }
+.seat-action-label.check { background: var(--gto-check-bg); color: var(--gto-check); }
+.seat-action-label.fold { background: var(--gto-fold-bg); color: var(--gto-fold); }
+
+/* Seat Hand Cards */
+.seat-cards {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+/* --- Poker Cards rendering --- */
+.poker-card {
+  width: 32px;
+  height: 48px;
+  border-radius: 4px;
+  background: white;
+  border: 1px solid rgba(0,0,0,0.15);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 2px 4px;
+  user-select: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.poker-card.red {
+  color: #ff3333;
+}
+.poker-card.black {
+  color: #111111;
+}
+
+.poker-card.empty-slot {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+.poker-card.empty-slot:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.poker-card.hidden-back {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 1.5px solid var(--accent-green);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  position: relative;
+}
+
+.poker-card.hidden-back::after {
+  content: '♣';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--accent-green);
+  opacity: 0.3;
+  font-size: 1.1rem;
+}
+
+/* Community Cards sizing */
+.community-cards-container .poker-card {
+  width: 48px;
+  height: 72px;
+  font-size: 1.1rem;
+  padding: 4px 6px;
+}
+
+/* --- Seat Button and Bet Chips --- */
+.dealer-button {
+  position: absolute;
+  background: white;
+  color: black;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.65rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  border: 1px solid #ddd;
+  z-index: 12;
+}
+
+/* Positions relative to the player seat card */
+.dealer-button[data-seat-btn="0"] { bottom: 125%; left: 50%; }
+.dealer-button[data-seat-btn="1"] { bottom: 50%; right: -25px; }
+.dealer-button[data-seat-btn="2"] { bottom: -20px; right: -20px; }
+.dealer-button[data-seat-btn="3"] { top: -20px; right: -20px; }
+.dealer-button[data-seat-btn="4"] { top: 125%; left: 50%; }
+.dealer-button[data-seat-btn="5"] { top: 125%; left: 50%; }
+.dealer-button[data-seat-btn="6"] { top: -20px; left: -20px; }
+.dealer-button[data-seat-btn="7"] { bottom: -20px; left: -20px; }
+.dealer-button[data-seat-btn="8"] { bottom: 50%; left: -25px; }
+
+/* Current Bet Chips Indicator */
+.bet-chips {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fbbf24; /* yellow-400 */
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 11;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.bet-chips[data-seat-bet="0"] { bottom: 130%; left: 10%; }
+.bet-chips[data-seat-bet="1"] { bottom: 40%; right: -50px; }
+.bet-chips[data-seat-bet="2"] { bottom: -25px; right: -40px; }
+.bet-chips[data-seat-bet="3"] { top: -25px; right: -40px; }
+.bet-chips[data-seat-bet="4"] { top: 130%; left: 10%; }
+.bet-chips[data-seat-bet="5"] { top: 130%; left: 10%; }
+.bet-chips[data-seat-bet="6"] { top: -25px; left: -40px; }
+.bet-chips[data-seat-bet="7"] { bottom: -25px; left: -40px; }
+.bet-chips[data-seat-bet="8"] { bottom: 40%; left: -50px; }
+
+.bet-chips svg {
+  color: #fbbf24;
+  width: 10px;
+  height: 10px;
+}
+
+/* Animations */
+.chip-deal-anim {
+  animation: chipBounce 0.4s ease-out;
+}
+
+@keyframes chipBounce {
+  0% { transform: translateY(-10px) scale(0.5); opacity: 0; }
+  70% { transform: translateY(2px) scale(1.1); opacity: 1; }
+  100% { transform: translateY(0) scale(1); }
+}

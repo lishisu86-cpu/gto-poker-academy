@@ -1,0 +1,10 @@
+{
+  "name": "gto-poker-academy",
+  "version": "1.0.0",
+  "description": "Premium GTO Texas Hold'em Academy training application.",
+  "type": "module",
+  "scripts": {
+    "test": "node scripts/test_core.js"
+  },
+  "dependencies": {}
+}
