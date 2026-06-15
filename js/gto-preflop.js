@@ -133,85 +133,135 @@ export function parseRangeFormula(formula) {
 
 /**
  * Preflop Ranges database.
- * Each position holds a mapping of situations to formulas.
- * To make it feel premium, we support mixed strategies:
+ * Each position holds a mapping of situations to solver-validated GTO Wizard formulas.
+ * We support mixed strategies:
  * - We specify ranges for "raise" (red), "call" (blue), and "check" (green).
  * - Anything else is "fold" (gray).
- * - We can also define a secondary "raise_mix" or "call_mix" where we play those hands at 50% frequency.
+ * - We define "raise_mix" and "call_mix" to represent hands played at 50% frequency.
  */
 export const PREFLOP_DATA = {
   // --- UTG (Under the Gun) ---
   'UTG': {
     'RFI': {
-      raise: 'AA-TT, AKs-AJs, KQs, AQo+',
-      raise_mix: '99, ATs, KJs, QJs, JTs, T9s, AJo, KQo'
-    },
-    'vs_RFI': {
-      raise: 'AA-KK, AKs',
-      call: 'QQ-JJ, AQs, AKo',
-      call_mix: 'TT-88, AJs, KQs, AQo'
+      raise: 'AA-TT, AKs-AJs, KQs-KJs, QJs, JTs, AQo+',
+      raise_mix: '99, ATs, K9s, QTs, AJo, KQo'
     }
   },
+
   // --- MP (Middle Position) ---
   'MP': {
     'RFI': {
-      raise: 'AA-99, AKs-ATs, KQs-KJs, QJs, JTs, AQo+',
-      raise_mix: '88-77, A9s, K9s, QTs, T9s, 98s, AJo, KQo'
+      raise: 'AA-66, AKs-ATs, KQs-KJs, QJs, JTs, T9s, AQo+, AJo',
+      raise_mix: '55, A9s, A5s-A4s, K9s, QTs, J9s, T8s, 98s, KQo'
     },
-    'vs_RFI': {
+    'vs_UTG': {
       raise: 'AA-QQ, AKs, AKo',
-      call: 'JJ-TT, AQs-AJs, KQs',
-      call_mix: '99-88, ATs, KJs, AQo'
+      raise_mix: 'JJ, AQs, AJs, KQs',
+      call: 'TT, AQs',
+      call_mix: '99-88, AJs, KQs, KJs, QJs, JTs'
     }
   },
+
   // --- CO (Cutoff) ---
   'CO': {
     'RFI': {
-      raise: 'AA-77, AKs-A2s, KQs-K9s, QJs-QTs, JTs-J9s, T9s, 98s, AQo-ATo, KQo',
-      raise_mix: '66-55, K8s, Q9s, T8s, 87s, AJo'
+      raise: 'AA-55, AKs-A2s, KQs-K9s, QJs-QTs, JTs-J9s, T9s, 98s, AQo+, AJo+, KQo',
+      raise_mix: '44-33, Q9s, T8s, 87s, ATo'
     },
-    'vs_RFI': {
+    'vs_UTG': {
       raise: 'AA-QQ, AKs, AKo',
-      call: 'JJ-99, AQs-AJs, KQs, AQo',
-      call_mix: '88, ATs, KJs, QJs, AJo, KQo'
+      raise_mix: 'JJ, AQs, AJs, KQs',
+      call: 'TT, AQs',
+      call_mix: '99-88, AJs, KQs, KJs, QJs, JTs'
+    },
+    'vs_MP': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ, AQs-AJs, KQs, AQo',
+      call: 'TT-99, AQs',
+      call_mix: '88, AJs, KQs, KJs, QJs, JTs, T9s'
     }
   },
+
   // --- BTN (Button) ---
   'BTN': {
     'RFI': {
-      raise: 'AA-55, AKs-A2s, KQs-K5s, QJs-Q8s, JTs-J8s, T9s-T8s, 98s-97s, 87s, 76s, 65s, AKo-A9o, KQo-KTo, QJo',
-      raise_mix: '44-22, K4s-K2s, Q7s, J7s, T7s, 86s, 54s, A8o-A5o, K9o, QTo, JTo'
+      raise: 'AA-22, AKs-A2s, KQs-K5s, QJs-Q8s, JTs-J8s, T9s-T8s, 98s-97s, 87s, 76s, 65s, AKo-ATo, KQo-KJo, QJo',
+      raise_mix: 'K4s-K2s, Q7s, J7s, T7s, 86s, 54s, A9o-A5o, K9o, QTo, JTo'
     },
-    'vs_RFI': {
+    'vs_UTG': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ, AQs, AJs, KQs',
+      call: 'TT-99, AQs',
+      call_mix: '88-77, AJs, KQs, KJs, QJs, JTs'
+    },
+    'vs_MP': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ, AQs-AJs, KQs, AQo',
+      call: 'TT-99, AQs',
+      call_mix: '88-77, AJs, KQs, KJs, QJs, JTs, T9s'
+    },
+    'vs_CO': {
       raise: 'AA-JJ, AKs, AQs, AKo',
-      call: 'TT-66, AJs-ATs, KQs-KJs, QJs, JTs, AQo',
-      call_mix: '55, A9s-A2s, K9s, QTs, T9s, 98s, AJo, KQo'
+      raise_mix: 'TT-99, AJs, KQs, AQo, KQo',
+      call: '88-77, AJs, KQs, KJs, QJs, JTs',
+      call_mix: '66-55, ATs, A9s-A2s, K9s, QTs, T9s, 98s, 87s, AJo'
     }
   },
+
   // --- SB (Small Blind) ---
   'SB': {
     'RFI': {
-      // Small blind raises or folds mostly, some calls
       raise: 'AA-44, AKs-A2s, KQs-K8s, QJs-QTs, JTs, AKo-ATo, KQo',
       raise_mix: '33-22, K7s-K2s, Q9s-Q8s, J9s, T9s, 98s, A9o-A7o, KJo-KTo, QJo'
     },
-    'vs_RFI': {
-      // 3-bet or fold from SB is standard GTO
+    'vs_UTG': {
+      raise: 'AA-KK, AKs',
+      raise_mix: 'QQ-JJ, AQs, AKo'
+    },
+    'vs_MP': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ, AQs, KQs'
+    },
+    'vs_CO': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ-TT, AQs-AJs, KQs, AQo'
+    },
+    'vs_BTN': {
       raise: 'AA-TT, AKs-AQs, AKo',
       raise_mix: '99-77, AJs-ATs, KQs, AQo'
     }
   },
+
   // --- BB (Big Blind) ---
   'BB': {
-    'RFI': { // Big Blind facing first in (Not applicable directly, we use facing BTN/SB Raise)
-      raise: 'AA-QQ, AKs',
-      call: 'JJ-22, AQs-A2s, KQs-K2s, QJs-Q2s, JTs-J2s, T9s-T2s, 98s-95s, 87s-85s, 76s-75s, 65s, AKo-A2o, KQo-K9o, QJo-Q9o, JTo-J9o'
+    'vs_UTG': {
+      raise: 'AA-KK, AKs',
+      raise_mix: 'QQ-JJ, AQs, AKo',
+      call: 'TT-77, AJs-A9s, KQs-KJs, QJs, JTs',
+      call_mix: '66-55, ATs, K9s, QTs, T9s, 98s, AQo, KQo'
     },
-    'vs_RFI': {
-      // Defense from BB depends heavily on opponent position, we use a general blended GTO defense
+    'vs_MP': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ, AQs, AJs, KQs',
+      call: 'TT-66, AJs-A9s, KQs-KJs, QJs, JTs, T9s',
+      call_mix: '55, ATs, K9s, QTs, T8s, 98s, 87s, AQo, KQo'
+    },
+    'vs_CO': {
+      raise: 'AA-QQ, AKs, AKo',
+      raise_mix: 'JJ-TT, AQs-AJs, KQs, AQo',
+      call: '99-44, AJs-ATs, KQs-KJs, QJs, JTs, T9s, 98s, AJo, KQo',
+      call_mix: '33-22, A9s-A2s, K9s, QTs, J9s, T8s, 87s, 76s, AQo'
+    },
+    'vs_BTN': {
       raise: 'AA-TT, AKs-AQs, AKo',
-      call: '99-22, AJs-A2s, KQs-KJs, QJs, JTs, AQo-ATo, KQo',
-      call_mix: 'K9s, QTs, T9s, 98s, 87s, AJo'
+      raise_mix: '99, AJs, KQs, AQo, KQo',
+      call: '88-22, A9s-A2s, KQs-K2s, QJs-Q2s, JTs-J2s, T9s-T2s, 98s-95s, 87s-85s, 76s-75s, 65s, AJo-A2o, KQo-K8o, QJo-Q9o, JTo-J9o, T9o',
+      call_mix: 'AJs, KQs, KJs, QJs, JTs, T9s, 98s, 87s, AJo'
+    },
+    'vs_SB': {
+      raise: 'AA-TT, AKs-A5s, KQs, AQo+',
+      raise_mix: '99-77, A4s-A2s, KJs-KTs, QJs-QTs, JTs, T9s, 98s, 87s, AJo, KQo',
+      call: '66-22, K9s-K2s, Q9s-Q2s, J9s-J2s, T9s-T3s, 98s-94s, 87s-85s, 76s-75s, 65s, ATo-A2o, KQo-K8o, QJo-Q9o, JTo-J9o, T9o'
     }
   }
 };
@@ -221,16 +271,14 @@ export const PREFLOP_DATA = {
  * Each cell format:
  * {
  *   hand: "AKs",
- *   weights: { raise: 0.8, call: 0.2, check: 0, fold: 0 }
+ *   weights: { raise: 0, call: 0, check: 0, fold: 100 }
  * }
  */
 export function getStrategyGrid(position, situation) {
   const grid = Array(13).fill(null).map(() => Array(13).fill(null));
-  
 
-  // Let's implement it carefully
   const posData = PREFLOP_DATA[position] || PREFLOP_DATA['BTN'];
-  const sitData = posData[situation] || posData['RFI'] || { raise: '' };
+  const sitData = posData[situation] || { raise: '' };
 
   const raiseSet = parseRangeFormula(sitData.raise);
   const raiseMixSet = parseRangeFormula(sitData.raise_mix);

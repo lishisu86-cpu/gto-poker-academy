@@ -98,7 +98,11 @@
           <span class="selector-label">Scenario (Strategic Situation)</span>
           <div class="button-grid" id="preflop-situations">
             <button class="selector-btn active" data-sit="RFI">RFI (Raise First In)</button>
-            <button class="selector-btn" data-sit="vs_RFI">Facing RFI / Defender</button>
+            <button class="selector-btn" data-sit="vs_UTG">vs UTG Open</button>
+            <button class="selector-btn" data-sit="vs_MP">vs MP Open</button>
+            <button class="selector-btn" data-sit="vs_CO">vs CO Open</button>
+            <button class="selector-btn" data-sit="vs_BTN">vs BTN Open</button>
+            <button class="selector-btn" data-sit="vs_SB">vs SB Open</button>
           </div>
         </div>
       </div>
@@ -108,6 +112,33 @@
         
         <!-- Left: Interactive 13x13 Grid -->
         <div class="glass-panel grid-wrapper glow-hover">
+          <div class="drawing-toolbar">
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-paint-mode">
+              <span class="slider-round"></span>
+              <span class="paint-mode-label">Paint Mode (自定义手牌绘制)</span>
+            </label>
+            
+            <div id="paint-brushes" class="paint-brushes" style="display: none;">
+              <button class="brush-btn active" data-brush="raise" title="Open Raise 100%">
+                <span class="brush-color raise"></span>Raise (100%)
+              </button>
+              <button class="brush-btn" data-brush="raise_mix" title="Raise Mix 50%">
+                <span class="brush-color raise_mix"></span>Raise (50%)
+              </button>
+              <button class="brush-btn" data-brush="call" title="Call/Defense 100%">
+                <span class="brush-color call"></span>Call (100%)
+              </button>
+              <button class="brush-btn" data-brush="call_mix" title="Call Mix 50%">
+                <span class="brush-color call_mix"></span>Call (50%)
+              </button>
+              <button class="brush-btn" data-brush="fold" title="Fold 100%">
+                <span class="brush-color fold"></span>Fold (100%)
+              </button>
+              <button id="btn-clear-canvas" class="brush-action-btn" title="Clear Grid">🧹 Clear All</button>
+              <button id="btn-reset-gto" class="brush-action-btn" title="Reset to GTO">🔄 Reset to GTO</button>
+            </div>
+          </div>
           <div class="starting-hand-grid" id="starting-hand-grid">
             <!-- Programmatically injected -->
           </div>
@@ -287,6 +318,34 @@
         <button class="modal-btn" id="modal-btn-clear" style="border-color: #ff4d4d; color: #ff4d4d">Clear Slot</button>
         <button class="modal-btn" id="modal-btn-random">Random</button>
         <button class="modal-btn primary" id="close-modal-btn" onclick="document.getElementById('card-selector-modal').classList.remove('active')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GTO Hand Analysis Modal -->
+  <div class="modal-overlay" id="gto-hand-analysis-modal">
+    <div class="modal-content" style="max-width: 420px; text-align: center;">
+      <div class="modal-header">
+        <h3 class="modal-title" id="analysis-modal-title">AA GTO Heuristic</h3>
+        <button class="modal-close" id="close-analysis-modal-btn">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 1rem;">
+        <!-- Visual cards display -->
+        <div class="hand-display-visual" id="analysis-hand-cards" style="display: flex; justify-content: center; gap: 1rem; margin-bottom: 1.5rem;">
+          <!-- Cards will be dynamically injected here -->
+        </div>
+        
+        <!-- Action frequencies breakdown list -->
+        <div class="analysis-stats" id="analysis-stats-breakdown" style="margin-bottom: 1.5rem;">
+          <!-- Action rows will be dynamically injected here -->
+        </div>
+
+        <div class="analysis-commentary-box" style="background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: left; max-height: 150px; overflow-y: auto;">
+          <p id="analysis-commentary-text" style="font-size: 0.85rem; line-height: 1.5; color: var(--text-secondary); margin: 0;"></p>
+        </div>
+      </div>
+      <div class="modal-actions" style="justify-content: center; margin-top: 1.5rem;">
+        <button class="modal-btn primary" id="btn-close-analysis" style="min-width: 120px;">Done</button>
       </div>
     </div>
   </div>
