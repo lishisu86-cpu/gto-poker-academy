@@ -72,6 +72,14 @@ export class PokerGame {
     const activeSeats = this.getActivePlayers();
     if (activeSeats.length < 2) return false;
 
+    // Auto-reload chips to starting chips if any active player is broke (chips <= 0)
+    const hasBrokePlayer = this.players.some(p => p.isActive && p.chips <= 0);
+    if (hasBrokePlayer) {
+      this.players.forEach(p => {
+        if (p.isActive) p.chips = this.startingChips;
+      });
+    }
+
     // Rotate dealer button
     this.dealerIdx = (this.dealerIdx + 1) % this.numSeats;
     while (!this.players[this.dealerIdx].isActive) {
@@ -235,6 +243,24 @@ export class PokerGame {
       this.players.forEach(p => {
         if (p.id !== player.id) p.hasActed = false;
       });
+    } else if (action === 'allin') {
+      // All-In action
+      const allinAmt = player.chips + player.bet;
+      player.chips = 0;
+      player.bet = allinAmt;
+      
+      // If going all-in is a raise/bet
+      if (player.bet > this.currentBet) {
+        this.lastBet = this.currentBet;
+        this.currentBet = player.bet;
+        // When someone raises/bets all-in, others must act again
+        this.players.forEach(p => {
+          if (p.id !== player.id) p.hasActed = false;
+        });
+      } else {
+        // If going all-in is just a call/under-call, it doesn't reopen action
+        // No need to reset hasActed for others
+      }
     }
 
     this.checkHandResolution();

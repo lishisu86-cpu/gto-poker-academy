@@ -636,7 +636,7 @@ export class UIManager {
         const oldStreet = this.game.street;
         const oldActiveIdx = this.game.activePlayerIdx;
 
-        const engineAction = (act === 'allin') ? 'raise' : act;
+        const engineAction = act;
         this.game.processAction(engineAction, amount);
 
         this.checkStateChangesAndLog(oldStreet, oldActiveIdx);
@@ -938,6 +938,14 @@ export class UIManager {
       actionChosen = 'fold';
     }
 
+    // If there are no active opponents with chips left, any aggressive action (raise, allin) must be forced to 'call'
+    const otherPlayersInHand = this.game.getPlayersInHand().filter(p => p.id !== activePlayer.id);
+    const hasActiveOpponentsWithChips = otherPlayersInHand.some(p => p.chips > 0);
+
+    if (!hasActiveOpponentsWithChips && (actionChosen === 'raise' || actionChosen === 'allin')) {
+      actionChosen = 'call';
+    }
+
     // Normalize check/call depending on facing bets
     const lastBetSize = this.game.currentBet;
     const playerBetMatched = activePlayer.bet;
@@ -960,6 +968,10 @@ export class UIManager {
         ? Math.floor(totalPot / 2) 
         : lastBetSize * 3;
       amount = Math.max(minRaise, Math.min(maxRaise, amount));
+
+      if (amount === maxRaise) {
+        actionChosen = 'allin';
+      }
     }
 
     // 3. Log the action
@@ -979,12 +991,14 @@ export class UIManager {
       } else {
         logMessage = `${activePlayer.name}${posLabel} raises to $${amount}.`;
       }
+    } else if (actionChosen === 'allin') {
+      logMessage = `${activePlayer.name}${posLabel} goes All-In for $${amount}! 💥`;
     }
 
     // Play action sound
     if (actionChosen === 'fold' || actionChosen === 'check') {
       this.audio.playFold();
-    } else if (actionChosen === 'call' || actionChosen === 'raise') {
+    } else if (actionChosen === 'call' || actionChosen === 'raise' || actionChosen === 'allin') {
       this.audio.playChip();
     }
 
@@ -1325,7 +1339,13 @@ export class UIManager {
       if (checkBtn) checkBtn.style.display = 'none';
       if (callBtn) {
         callBtn.style.display = 'inline-block';
-        callBtn.textContent = `Call $${lastBetSize - playerBetMatched}`;
+        const callAmt = Math.min(lastBetSize - playerBetMatched, activePlayer.chips);
+        const isAllInCall = callAmt === activePlayer.chips;
+        if (isAllInCall) {
+          callBtn.textContent = `Call $${callAmt} (All-In)`;
+        } else {
+          callBtn.textContent = `Call $${callAmt}`;
+        }
       }
     } else {
       // No bet in front: Check is valid, Call is invalid
@@ -1349,7 +1369,10 @@ export class UIManager {
       if (display) display.textContent = `$${raiseSlider.value}`;
     }
 
-    if (activePlayer.chips <= 0 || minRaise > maxRaise) {
+    const otherPlayersInHand = this.game.getPlayersInHand().filter(p => p.id !== activePlayer.id);
+    const hasActiveOpponentsWithChips = otherPlayersInHand.some(p => p.chips > 0);
+
+    if (activePlayer.chips <= 0 || minRaise > maxRaise || !hasActiveOpponentsWithChips) {
       if (raiseBtn) raiseBtn.style.display = 'none';
       if (sliderContainer) sliderContainer.style.display = 'none';
     } else {
@@ -1360,7 +1383,7 @@ export class UIManager {
     }
 
     if (allinBtn) {
-      if (activePlayer.chips <= 0) {
+      if (activePlayer.chips <= 0 || !hasActiveOpponentsWithChips) {
         allinBtn.style.display = 'none';
       } else {
         allinBtn.style.display = 'inline-block';
