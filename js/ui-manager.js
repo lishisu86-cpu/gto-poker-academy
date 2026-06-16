@@ -3,6 +3,7 @@
 import { coordsToHand, getStrategyGrid } from './gto-preflop.js';
 import { runMonteCarlo, SUIT_SYMBOLS } from './evaluator.js';
 import { getGTOAdvice, classifyHandStrength, analyzeBoardTexture } from './gto-postflop.js';
+import { AudioManager } from './audio-manager.js';
 
 export class UIManager {
   constructor(game) {
@@ -23,6 +24,9 @@ export class UIManager {
     this.gameMode = 'play'; // 'play' (real play training) vs 'edit' (sandbox config edit)
     this.manuallyRevealedPlayers = new Set(); // bot IDs manually clicked to reveal face-up
     this.coachUnlocked = false; // whether GTO advice blur is dissolved for current Hero turn
+
+    // --- Sound Synthesis Engine ---
+    this.audio = new AudioManager();
   }
 
   /**
@@ -614,6 +618,13 @@ export class UIManager {
           }
         }
         
+        // Play action sound
+        if (act === 'fold' || act === 'check') {
+          this.audio.playFold();
+        } else if (act === 'call' || act === 'raise') {
+          this.audio.playChip();
+        }
+
         this.addLogEntry(logMessage, act);
 
         const oldStreet = this.game.street;
@@ -721,6 +732,18 @@ export class UIManager {
         this.updateGTORecommendations();
       });
     }
+
+    // Game Sound Toggle
+    const soundToggle = document.getElementById('toggle-game-sound');
+    if (soundToggle) {
+      this.audio.setMuted(!soundToggle.checked);
+      soundToggle.addEventListener('change', (e) => {
+        this.audio.setMuted(!e.target.checked);
+        if (e.target.checked) {
+          this.audio.playChip();
+        }
+      });
+    }
   }
 
   initiateHandAndLog() {
@@ -739,6 +762,7 @@ export class UIManager {
       return;
     }
 
+    this.audio.playCardDeal();
     this.addLogEntry('--- New Hand Started ---', 'system');
     
     // Log Blinds
@@ -774,12 +798,15 @@ export class UIManager {
       if (currentStreet === 'flop') {
         const cards = this.game.communityCards.join(' ');
         this.addLogEntry(`--- Flop Dealt: [${cards}] ---`, 'street');
+        this.audio.playCardDeal();
       } else if (currentStreet === 'turn') {
         const cards = this.game.communityCards.join(' ');
         this.addLogEntry(`--- Turn Dealt: [${cards}] ---`, 'street');
+        this.audio.playCardDeal();
       } else if (currentStreet === 'river') {
         const cards = this.game.communityCards.join(' ');
         this.addLogEntry(`--- River Dealt: [${cards}] ---`, 'street');
+        this.audio.playCardDeal();
       } else if (currentStreet === 'showdown') {
         this.addLogEntry(`--- Showdown ---`, 'street');
         this.logShowdownResults();
@@ -799,6 +826,7 @@ export class UIManager {
     // Check if only 1 player won because everyone else folded
     if (inHand.length === 1) {
       this.addLogEntry(`🏆 ${inHand[0].name} wins the pot (Everyone else folded).`, 'system');
+      this.audio.playWin();
       return;
     }
 
@@ -830,6 +858,7 @@ export class UIManager {
     // Log the winner(s)
     const winnerNames = winners.map(w => w.name).join(' & ');
     this.addLogEntry(`🏆 ${winnerNames} wins the pot!`, 'system');
+    this.audio.playWin();
   }
 
   scheduleBotTurn() {
@@ -922,6 +951,13 @@ export class UIManager {
       } else {
         logMessage = `${activePlayer.name}${posLabel} raises to $${amount}.`;
       }
+    }
+
+    // Play action sound
+    if (actionChosen === 'fold' || actionChosen === 'check') {
+      this.audio.playFold();
+    } else if (actionChosen === 'call' || actionChosen === 'raise') {
+      this.audio.playChip();
     }
 
     this.addLogEntry(logMessage, actionChosen);
@@ -1107,21 +1143,26 @@ export class UIManager {
         dealerBtn.className = 'dealer-button';
         dealerBtn.setAttribute('data-seat-btn', p.id);
         dealerBtn.textContent = 'D';
-        tableEl.appendChild(dealerBtn);
+        seatDiv.appendChild(dealerBtn);
       }
 
       // Render Current bet chips indicator
       if (p.isActive && p.bet > 0) {
         const betDiv = document.createElement('div');
-        betDiv.className = 'bet-chips chip-deal-anim';
+        
+        let colorClass = 'chip-red';
+        if (p.bet >= 500) {
+          colorClass = 'chip-black';
+        } else if (p.bet >= 100) {
+          colorClass = 'chip-blue';
+        }
+
+        betDiv.className = `bet-chips chip-deal-anim ${colorClass}`;
         betDiv.setAttribute('data-seat-bet', p.id);
         betDiv.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <circle cx="10" cy="10" r="8" stroke="white" stroke-width="1.5" stroke-dasharray="2 1"/>
-          </svg>
           $${p.bet}
         `;
-        tableEl.appendChild(betDiv);
+        seatDiv.appendChild(betDiv);
       }
     });
 

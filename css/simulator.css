@@ -33,6 +33,7 @@
   padding: 2rem;
   margin-top: 2rem;
   margin-bottom: 2rem;
+  container-type: inline-size;
 }
 
 /* Luxury leather armrest/rim bumper */
@@ -125,23 +126,23 @@
 /* --- Player Seat Positions --- */
 .player-seat {
   position: absolute;
-  width: 110px;
-  height: 120px;
+  width: clamp(75px, 12cqw, 110px);
+  height: clamp(82px, 13cqw, 120px);
   z-index: 10;
   transform: translate(-50%, -50%);
   transition: all var(--transition-normal);
 }
 
-/* Seat Coordinate Map for 9 positions */
-.player-seat[data-seat="0"] { top: 88%; left: 50%; }  /* Hero (Bottom Center) */
-.player-seat[data-seat="1"] { top: 78%; left: 20%; }  /* Bottom Left */
-.player-seat[data-seat="2"] { top: 50%; left: 10%; }  /* Middle Left */
-.player-seat[data-seat="3"] { top: 22%; left: 20%; }  /* Top Left */
-.player-seat[data-seat="4"] { top: 12%; left: 40%; }  /* Top Mid-Left */
-.player-seat[data-seat="5"] { top: 12%; left: 60%; }  /* Top Mid-Right */
-.player-seat[data-seat="6"] { top: 22%; left: 80%; }  /* Top Right */
-.player-seat[data-seat="7"] { top: 50%; left: 90%; }  /* Middle Right */
-.player-seat[data-seat="8"] { top: 78%; left: 80%; }  /* Bottom Right */
+/* Seat Coordinate Map for 9 positions with 3D dealer card sweep direction vectors */
+.player-seat[data-seat="0"] { top: 88%; left: 50%; --deal-tx: 0px; --deal-ty: -152px; }  /* Hero (Bottom Center) */
+.player-seat[data-seat="1"] { top: 78%; left: 20%; --deal-tx: 216px; --deal-ty: -112px; }  /* Bottom Left */
+.player-seat[data-seat="2"] { top: 50%; left: 10%; --deal-tx: 288px; --deal-ty: 0px; }  /* Middle Left */
+.player-seat[data-seat="3"] { top: 22%; left: 20%; --deal-tx: 216px; --deal-ty: 112px; }  /* Top Left */
+.player-seat[data-seat="4"] { top: 12%; left: 40%; --deal-tx: 72px; --deal-ty: 152px; }  /* Top Mid-Left */
+.player-seat[data-seat="5"] { top: 12%; left: 60%; --deal-tx: -72px; --deal-ty: 152px; }  /* Top Mid-Right */
+.player-seat[data-seat="6"] { top: 22%; left: 80%; --deal-tx: -216px; --deal-ty: 112px; }  /* Top Right */
+.player-seat[data-seat="7"] { top: 50%; left: 90%; --deal-tx: -288px; --deal-ty: 0px; }  /* Middle Right */
+.player-seat[data-seat="8"] { top: 78%; left: 80%; --deal-tx: -216px; --deal-ty: -112px; }  /* Bottom Right */
 
 /* Player Info Card UI */
 .seat-card {
@@ -277,8 +278,8 @@
 /* --- Majestic 3D Card Flipping Styles --- */
 .poker-card-wrapper {
   perspective: 1000px;
-  width: 34px;
-  height: 50px;
+  width: clamp(24px, 3.5cqw, 34px);
+  height: clamp(35px, 5cqw, 50px);
   display: inline-block;
   cursor: pointer;
 }
@@ -373,29 +374,31 @@
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-/* Sizing Adjustments for Community Cards */
+/* Sizing Adjustments for Community Cards with deck glide vectors */
 .community-cards-row .poker-card-wrapper {
-  width: 52px;
-  height: 76px;
+  width: clamp(36px, 5.5cqw, 52px);
+  height: clamp(52px, 8cqw, 76px);
+  --deal-tx: -200px;
+  --deal-ty: 0px;
 }
 
 .community-cards-row .card-front {
   padding: 5px 8px;
-  font-size: 1.25rem;
+  font-size: clamp(0.8rem, 1.8cqw, 1.25rem);
 }
 
 .community-cards-row .card-rank {
-  font-size: 1.25rem;
+  font-size: clamp(0.8rem, 1.8cqw, 1.25rem);
 }
 
 .community-cards-row .card-suit {
-  font-size: 1.6rem;
+  font-size: clamp(1rem, 2.3cqw, 1.6rem);
   align-self: flex-end;
 }
 
 .community-cards-row .card-back::after {
   content: '🛡️';
-  font-size: 1.4rem;
+  font-size: clamp(0.9rem, 2cqw, 1.4rem);
 }
 
 /* --- Seat Button and Bet Chips --- */
@@ -646,18 +649,34 @@
 
 /* Stacked 3D Clay Chips cylinder shadow styling */
 .bet-chips {
-  border: 2px dashed #ffffff !important;
-  box-shadow: 
-    0 6px 14px rgba(0,0,0,0.7),
-    0 3px 0 #7f1d1d,
-    inset 0 0 6px rgba(0,0,0,0.6) !important;
+  border: 2px dashed rgba(255, 255, 255, 0.8) !important;
   text-shadow: 0 1.5px 2px rgba(0,0,0,0.9) !important;
   font-weight: 800 !important;
 }
-.bet-chips[data-seat-bet="0"] {
+
+/* Color-coded volumetric stacked clay chips */
+.bet-chips.chip-red {
+  background: radial-gradient(circle, #ff5f5f 0%, #b91c1c 100%) !important;
   box-shadow: 
     0 6px 14px rgba(0,0,0,0.7),
-    0 3px 0 #1e3a8a,
+    0 3.5px 0 #7f1d1d,
     inset 0 0 6px rgba(0,0,0,0.6) !important;
+}
+
+.bet-chips.chip-blue {
+  background: radial-gradient(circle, #5b99ff 0%, #1d4ed8 100%) !important;
+  box-shadow: 
+    0 6px 14px rgba(0,0,0,0.7),
+    0 3.5px 0 #112a75,
+    inset 0 0 6px rgba(0,0,0,0.6) !important;
+}
+
+.bet-chips.chip-black {
+  background: radial-gradient(circle, #4b5563 0%, #111827 100%) !important;
+  border-color: rgba(251, 191, 36, 0.8) !important; /* Gold dashed stripes */
+  box-shadow: 
+    0 6px 14px rgba(0,0,0,0.8),
+    0 3.5px 0 #030712,
+    inset 0 0 6px rgba(0,0,0,0.7) !important;
 }
 
