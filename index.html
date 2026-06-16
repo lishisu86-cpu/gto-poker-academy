@@ -205,6 +205,32 @@
 
     <!-- Tab 2: 9-Max Simulator (Virtual Table & AI Heuristics) -->
     <section id="simulator" class="tab-content">
+      
+      <!-- Simulator Config & Control Bar -->
+      <div class="glass-panel simulator-control-bar" style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+          <!-- Dual Game Mode Switcher -->
+          <div class="mode-switcher-group" style="display: flex; background: rgba(0,0,0,0.4); padding: 4px; border-radius: 25px; border: 1.5px solid var(--border-color); gap: 4px;">
+            <button id="btn-mode-play" class="mode-tab-btn active" style="background: var(--accent-green); color: #090e16; border: none; font-size: 0.85rem; font-weight: 800; padding: 0.45rem 1.15rem; border-radius: 20px; cursor: pointer; transition: all 0.25s; box-shadow: 0 0 10px var(--accent-green-glow);">🎮 自主实战对局</button>
+            <button id="btn-mode-edit" class="mode-tab-btn" style="background: transparent; color: var(--text-secondary); border: none; font-size: 0.85rem; font-weight: 800; padding: 0.45rem 1.15rem; border-radius: 20px; cursor: pointer; transition: all 0.25s;">🛠️ 沙盒场景编辑</button>
+          </div>
+          
+          <label class="toggle-switch-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="toggle-reveal-opponent-cards" style="display: none;">
+            <span class="custom-toggle"></span>
+            <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">👁️ GTO 上帝视角 (God Mode)</span>
+          </label>
+          <label class="toggle-switch-container" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+            <input type="checkbox" id="toggle-gto-coach" checked style="display: none;">
+            <span class="custom-toggle"></span>
+            <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">🎓 实时导师提示 (GTO Coach)</span>
+          </label>
+        </div>
+        <div id="simulation-speed-indicator" style="font-size: 0.85rem; color: var(--accent-green); font-weight: 600; text-shadow: 0 0 8px var(--accent-green-glow);">
+          ⚡ GTO AI 自动发牌/决策引擎已就绪
+        </div>
+      </div>
+
       <div class="simulator-container">
         
         <!-- Left: felt table and action panel -->
@@ -232,68 +258,106 @@
           </div>
 
           <!-- Action dashboard buttons at bottom of table -->
-          <div class="action-dashboard">
-            <div class="action-buttons-group">
-              <button class="action-btn fold" id="action-fold" data-action="fold">Fold</button>
-              <button class="action-btn check" id="action-check" data-action="check">Check</button>
-              <button class="action-btn call" id="action-call" data-action="call">Call</button>
-              <button class="action-btn raise" id="action-raise" data-action="raise">Raise</button>
-              <button class="action-btn reset-btn" id="btn-reset-hand">Reset Hand</button>
-              <button class="action-btn reset-btn" id="btn-next-street" style="background: rgba(0, 255, 157, 0.05); color: var(--accent-green); border-color: var(--accent-green-glow)">Deal Street</button>
+          <div class="action-dashboard" style="display: flex; flex-direction: column; align-items: stretch; gap: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; width: 100%;">
+              <div class="action-buttons-group" style="display: flex; flex-wrap: wrap;">
+                <button class="action-btn fold" id="action-fold" data-action="fold">Fold</button>
+                <button class="action-btn check" id="action-check" data-action="check">Check</button>
+                <button class="action-btn call" id="action-call" data-action="call">Call</button>
+                <button class="action-btn raise" id="action-raise" data-action="raise">Raise</button>
+                <button class="action-btn reset-btn" id="btn-reset-hand">Reset Hand</button>
+                <button class="action-btn reset-btn" id="btn-next-street" style="background: rgba(0, 255, 157, 0.05); color: var(--accent-green); border-color: var(--accent-green-glow)">Deal Street</button>
+              </div>
             </div>
 
-            <!-- Raising slider -->
-            <div class="slider-container">
-              <span style="font-size: 0.8rem; font-weight:600; color: var(--text-secondary)">SIZE:</span>
-              <input type="range" id="raise-amount-slider" min="20" max="2000" value="20">
-              <span class="slider-value" id="raise-slider-value">$20</span>
+            <!-- Raising slider & Bet Presets -->
+            <div class="slider-container" style="display: flex; flex-direction: column; align-items: stretch; gap: 0.75rem; width: 100%; margin: 0.5rem 0 0 0;">
+              <div style="display: flex; align-items: center; gap: 0.75rem; width: 100%;">
+                <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary)">SIZE:</span>
+                <input type="range" id="raise-amount-slider" min="20" max="2000" value="20" style="flex: 1;">
+                <span class="slider-value" id="raise-slider-value">$20</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: -6px; padding: 0 4px; font-weight: 500;">
+                <span id="slider-multiplier-label">Min Bet (1.0x BB)</span>
+                <span id="slider-pot-desc">Pot: $0</span>
+              </div>
+              
+              <!-- Bet Size Preset buttons -->
+              <div class="bet-presets-row" id="bet-presets-row" style="display: flex; gap: 0.5rem; justify-content: space-between; flex-wrap: wrap;">
+                <button class="preset-btn" data-preset="min" style="flex: 1; min-width: 60px; padding: 0.4rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">Min</button>
+                <button class="preset-btn" data-preset="1/3" style="flex: 1; min-width: 60px; padding: 0.4rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">1/3 Pot</button>
+                <button class="preset-btn" data-preset="1/2" style="flex: 1; min-width: 60px; padding: 0.4rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">1/2 Pot</button>
+                <button class="preset-btn" data-preset="2/3" style="flex: 1; min-width: 60px; padding: 0.4rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">2/3 Pot</button>
+                <button class="preset-btn" data-preset="pot" style="flex: 1; min-width: 60px; padding: 0.4rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">Pot</button>
+                <button class="preset-btn" data-preset="allin" style="flex: 1; min-width: 60px; padding: 0.4rem 0.5rem; font-size: 0.75rem; font-weight: 700; border-radius: 6px; background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); color: var(--text-secondary); cursor: pointer; transition: all 0.2s;">All-In</button>
+              </div>
             </div>
           </div>
 
         </div>
 
-        <!-- Right: AI advisor dashboard -->
-        <div class="glass-panel advisor-panel">
+        <!-- Right: AI advisor dashboard & Game Log Console -->
+        <div class="simulator-sidebar" style="display: flex; flex-direction: column; gap: 1.5rem; width: 380px;">
           
-          <!-- Current Hand Stats -->
-          <h3 class="advisor-section-title">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Active Hand Strength
-          </h3>
-          <div class="range-stats" style="margin-bottom: 0.5rem">
-            <div class="stat-row">
-              <span class="stat-label">Hand Category:</span>
-              <span class="stat-value" id="live-hand-strength" style="color: var(--text-primary); font-size: 0.95rem">Calculating...</span>
-            </div>
-            <div class="stat-row">
-              <span class="stat-label">Live Equity (MC):</span>
-              <span class="stat-value" id="live-equity-stat" style="color: var(--accent-green); font-size: 1.35rem; text-shadow: 0 0 10px var(--accent-green-glow)">0%</span>
+          <!-- AI Advisor Panel Wrapper with Blur Overlay capability -->
+          <div class="advisor-panel-wrapper" id="gto-advisor-wrapper">
+            <div class="glass-panel advisor-panel" id="gto-advisor-panel" style="width: 100%; border-radius: 12px; min-height: 420px; box-sizing: border-box; margin: 0;">
+              
+              <!-- Current Hand Stats -->
+              <h3 class="advisor-section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Active Hand Strength
+              </h3>
+              <div class="range-stats" style="margin-bottom: 0.5rem">
+                <div class="stat-row">
+                  <span class="stat-label">Hand Category:</span>
+                  <span class="stat-value" id="live-hand-strength" style="color: var(--text-primary); font-size: 0.95rem">Calculating...</span>
+                </div>
+                <div class="stat-row">
+                  <span class="stat-label">Live Equity (MC):</span>
+                  <span class="stat-value" id="live-equity-stat" style="color: var(--accent-green); font-size: 1.35rem; text-shadow: 0 0 10px var(--accent-green-glow)">0%</span>
+                </div>
+              </div>
+
+              <!-- GTO recommendation charts -->
+              <h3 class="advisor-section-title">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                GTO Recommended Action
+              </h3>
+              <div class="gto-recommendations-bar" id="rec-action-chart">
+                <!-- Programmatically injected -->
+              </div>
+
+              <!-- Tactical text description -->
+              <h3 class="advisor-section-title" style="margin-top: 1rem">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                Strategic Rationale
+              </h3>
+              <div class="advisor-commentary" id="rec-commentary-text">
+                <!-- Strategic commentary text -->
+              </div>
             </div>
           </div>
 
-          <!-- GTO recommendation charts -->
-          <h3 class="advisor-section-title">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            GTO Recommended Action
-          </h3>
-          <div class="gto-recommendations-bar" id="rec-action-chart">
-            <!-- Programmatically injected -->
+          <!-- Game Log Console -->
+          <div class="glass-panel game-log-panel" style="display: flex; flex-direction: column; padding: 1.25rem;">
+            <h3 class="advisor-section-title" style="margin-bottom: 0.75rem;">
+              <svg style="width: 18px; height: 18px" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Game Action Log
+            </h3>
+            <div class="game-log-box" id="game-log-box">
+              <div class="log-entry system">Welcome to GTO Poker Academy. Click "Reset Hand" to begin.</div>
+            </div>
           </div>
 
-          <!-- Tactical text description -->
-          <h3 class="advisor-section-title" style="margin-top: 1rem">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            Strategic Rationale
-          </h3>
-          <div class="advisor-commentary" id="rec-commentary-text">
-            <!-- Strategic commentary text -->
-          </div>
         </div>
 
       </div>

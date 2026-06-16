@@ -358,3 +358,121 @@
   font-size: 0.85rem;
   outline: none;
 }
+
+/* --- GTO Advisor Live Mask & Locks --- */
+.gto-blur-mask {
+  filter: blur(12px);
+  pointer-events: none;
+  user-select: none;
+  transition: filter 0.4s ease;
+}
+
+.advisor-panel-wrapper {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.advisor-lock-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(13, 20, 30, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  z-index: 100;
+  padding: 2rem;
+  text-align: center;
+  border-radius: 12px;
+  animation: fadeIn var(--transition-fast);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.advisor-lock-overlay .lock-icon {
+  font-size: 2.5rem;
+  animation: wobble 2.5s infinite ease-in-out;
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(0); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+.advisor-lock-overlay h4 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.advisor-lock-overlay p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+
+.advisor-lock-overlay .unlock-btn {
+  background: var(--accent-green);
+  color: #111;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 0 10px var(--accent-green-glow);
+}
+
+.advisor-lock-overlay .unlock-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px var(--accent-green-glow);
+}
+
+/* Custom Toggle Switch for Header Controls */
+.toggle-switch-container {
+  user-select: none;
+}
+
+.custom-toggle {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  transition: background 0.3s;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.custom-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: left 0.3s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+input:checked + .custom-toggle {
+  background: var(--accent-green);
+}
+
+input:checked + .custom-toggle::after {
+  left: 18px;
+}

@@ -18,6 +18,11 @@ export class UIManager {
     this.currentBrush = 'raise'; // 'raise', 'raise_mix', 'call', 'call_mix', 'fold'
     this.isPainting = false;
     this.customPreflopGrid = null; // Stored as a 13x13 strategy grid
+
+    // --- Premium Dual Mode & GTO Peeking Additions ---
+    this.gameMode = 'play'; // 'play' (real play training) vs 'edit' (sandbox config edit)
+    this.manuallyRevealedPlayers = new Set(); // bot IDs manually clicked to reveal face-up
+    this.coachUnlocked = false; // whether GTO advice blur is dissolved for current Hero turn
   }
 
   /**
@@ -485,8 +490,7 @@ export class UIManager {
     if (weights.raise > 0 && weights.fold > 0) {
       if (isSuited && ['A', 'K'].includes(r1) && !['Q', 'J'].includes(r2)) {
         return `混合策略 (Raise ${weights.raise}% / Fold ${weights.fold}%)。同花 A 弱高张（如 A5s-A2s）是 GTO 中经典的“3-Bet 诈唬候选牌”。它们阻挡了对手的 AA/AK，且翻后极具同花、顺子和两对潜力。混合频率可以完美平衡我们的范围。`;
-      }
-      return `混合加注策略 (Raise ${weights.raise}% / Fold ${weights.fold}%)。该手牌处于可玩与不可玩的边缘。GTO 使用混合频率进行开池或 3-Bet，能有效迷惑对手，并让我们的策略达到纳什均衡状态，不可被剥削。`;
+        return `混合加注策略 (Raise ${weights.raise}% / Fold ${weights.fold}%)。该手牌处于可玩与不可玩的边缘。GTO 使用混合频率进行开池或 3-Bet，能有效迷惑对手，并让我们的策略达到纳什均衡状态，不可被剥削。`;
     }
 
     if (weights.call > 0 && weights.fold > 0) {
@@ -518,16 +522,46 @@ export class UIManager {
 
   // --- Simulator Section ---
   setupSimulatorTab() {
-    this.game.startNewHand();
-    this.renderPokerTable();
+    this.isBotThinking = false;
+
+    // Mode switching buttons
+    const playModeBtn = document.getElementById('btn-mode-play');
+    const editModeBtn = document.getElementById('btn-mode-edit');
+
+    if (playModeBtn && editModeBtn) {
+      playModeBtn.addEventListener('click', () => {
+        if (this.gameMode === 'play') return;
+        this.gameMode = 'play';
+        playModeBtn.classList.add('active');
+        editModeBtn.classList.remove('active');
+        
+        // Reset and deal clean cards under Play Mode
+        this.manuallyRevealedPlayers.clear();
+        this.coachUnlocked = false;
+        this.initiateHandAndLog();
+        this.addLogEntry('--- Switched to Play Mode: Opponents are face-down. Click on any seat to peak! ---', 'system');
+      });
+
+      editModeBtn.addEventListener('click', () => {
+        if (this.gameMode === 'edit') return;
+        this.gameMode = 'edit';
+        editModeBtn.classList.add('active');
+        playModeBtn.classList.remove('active');
+        
+        // Retain existing state but allow card customizations
+        this.renderPokerTable();
+        this.updateGTORecommendations();
+        this.addLogEntry('--- Switched to Sandbox Edit Mode: Click on any card slot to manually customize! ---', 'system');
+      });
+    }
+
+    this.initiateHandAndLog();
 
     // Reset hand
     const resetBtn = document.getElementById('btn-reset-hand');
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
-        this.game.startNewHand();
-        this.renderPokerTable();
-        this.updateGTORecommendations();
+        this.initiateHandAndLog();
       });
     }
 
@@ -535,7 +569,9 @@ export class UIManager {
     const nextBtn = document.getElementById('btn-next-street');
     if (nextBtn) {
       nextBtn.addEventListener('click', () => {
+        const oldStreet = this.game.street;
         this.game.advanceStreet();
+        this.checkStateChangesAndLog(oldStreet, -1);
         this.renderPokerTable();
         this.updateGTORecommendations();
       });
@@ -545,6 +581,8 @@ export class UIManager {
     const actBtns = document.querySelectorAll('.action-dashboard .action-btn');
     actBtns.forEach(btn => {
       btn.addEventListener('click', () => {
+        if (this.isBotThinking) return;
+
         const act = btn.getAttribute('data-action');
         if (!act) return;
 
@@ -554,7 +592,36 @@ export class UIManager {
           amount = parseInt(slider?.value || 0);
         }
 
+        const activePlayer = this.game.players[this.game.activePlayerIdx];
+        const lastBetSize = this.game.currentBet;
+        const playerBetMatched = activePlayer.bet;
+
+        // Log Hero action
+        let logMessage = '';
+        if (act === 'fold') {
+          logMessage = `Hero folds.`;
+        } else if (act === 'check') {
+          logMessage = `Hero checks.`;
+        } else if (act === 'call') {
+          const callDiff = lastBetSize - playerBetMatched;
+          const actualCall = Math.min(callDiff, activePlayer.chips);
+          logMessage = `Hero calls $${actualCall}.`;
+        } else if (act === 'raise') {
+          if (lastBetSize === 0) {
+            logMessage = `Hero bets $${amount}.`;
+          } else {
+            logMessage = `Hero raises to $${amount}.`;
+          }
+        }
+        
+        this.addLogEntry(logMessage, act);
+
+        const oldStreet = this.game.street;
+        const oldActiveIdx = this.game.activePlayerIdx;
+
         this.game.processAction(act, amount);
+
+        this.checkStateChangesAndLog(oldStreet, oldActiveIdx);
         this.renderPokerTable();
         this.updateGTORecommendations();
       });
@@ -566,7 +633,352 @@ export class UIManager {
     if (raiseSlider && raiseValDisplay) {
       raiseSlider.addEventListener('input', (e) => {
         raiseValDisplay.textContent = `$${e.target.value}`;
+        this.updateRaiseButtonText();
       });
+    }
+
+    // Setup Bet Preset Click Handlers
+    const presetBtns = document.querySelectorAll('#bet-presets-row .preset-btn');
+    presetBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (this.isBotThinking) return;
+
+        const preset = btn.getAttribute('data-preset');
+        if (!preset) return;
+
+        const activePlayer = this.game.players[this.game.activePlayerIdx];
+        if (!activePlayer) return;
+
+        const lastBetSize = this.game.currentBet;
+        const playerBetMatched = activePlayer.bet;
+        const minRaise = lastBetSize === 0 ? this.game.bigBlind : lastBetSize * 2;
+        const maxRaise = activePlayer.chips + playerBetMatched;
+        const totalPot = this.game.pot + this.game.players.reduce((sum, p) => sum + p.bet, 0);
+
+        let targetAmt = minRaise;
+        if (preset === 'min') {
+          targetAmt = minRaise;
+        } else if (preset === '1/3') {
+          if (lastBetSize === 0) {
+            targetAmt = Math.floor(totalPot / 3);
+          } else {
+            const callAmt = lastBetSize - playerBetMatched;
+            targetAmt = Math.floor(lastBetSize + (totalPot + callAmt) / 3);
+          }
+        } else if (preset === '1/2') {
+          if (lastBetSize === 0) {
+            targetAmt = Math.floor(totalPot / 2);
+          } else {
+            const callAmt = lastBetSize - playerBetMatched;
+            targetAmt = Math.floor(lastBetSize + (totalPot + callAmt) / 2);
+          }
+        } else if (preset === '2/3') {
+          if (lastBetSize === 0) {
+            targetAmt = Math.floor((totalPot * 2) / 3);
+          } else {
+            const callAmt = lastBetSize - playerBetMatched;
+            targetAmt = Math.floor(lastBetSize + ((totalPot + callAmt) * 2) / 3);
+          }
+        } else if (preset === 'pot') {
+          if (lastBetSize === 0) {
+            targetAmt = totalPot;
+          } else {
+            const callAmt = lastBetSize - playerBetMatched;
+            targetAmt = Math.floor(lastBetSize + (totalPot + callAmt));
+          }
+        } else if (preset === 'allin') {
+          targetAmt = maxRaise;
+        }
+
+        // Clamp bet/raise size to valid ranges
+        targetAmt = Math.max(minRaise, Math.min(maxRaise, targetAmt));
+
+        // Update Slider and Text display
+        if (raiseSlider) {
+          raiseSlider.value = targetAmt;
+        }
+        if (raiseValDisplay) {
+          raiseValDisplay.textContent = `$${targetAmt}`;
+        }
+
+        // Sync Raise/Bet button text
+        this.updateRaiseButtonText();
+      });
+    });
+
+    // God Mode Toggle
+    const revealCardsToggle = document.getElementById('toggle-reveal-opponent-cards');
+    if (revealCardsToggle) {
+      revealCardsToggle.addEventListener('change', () => {
+        this.renderPokerTable();
+      });
+    }
+
+    // GTO Coach Toggle
+    const coachToggle = document.getElementById('toggle-gto-coach');
+    if (coachToggle) {
+      coachToggle.addEventListener('change', () => {
+        this.updateGTORecommendations();
+      });
+    }
+  }
+
+  initiateHandAndLog() {
+    this.isBotThinking = false;
+    this.manuallyRevealedPlayers.clear();
+    this.coachUnlocked = false;
+    this.isStreetDealt = true;
+    
+    // Clear log box or append starting logs
+    const logBox = document.getElementById('game-log-box');
+    if (logBox) logBox.innerHTML = '';
+    
+    const success = this.game.startNewHand();
+    if (!success) {
+      this.addLogEntry('Not enough active players to start a hand!', 'error');
+      return;
+    }
+
+    this.addLogEntry('--- New Hand Started ---', 'system');
+    
+    // Log Blinds
+    const sbPlayer = this.game.players.find(p => p.isSB);
+    const bbPlayer = this.game.players.find(p => p.isBB);
+    if (sbPlayer) {
+      this.addLogEntry(`${sbPlayer.name} posts Small Blind of $${sbPlayer.bet}.`, 'system');
+    }
+    if (bbPlayer) {
+      this.addLogEntry(`${bbPlayer.name} posts Big Blind of $${bbPlayer.bet}.`, 'system');
+    }
+    
+    this.renderPokerTable();
+    this.updateGTORecommendations();
+  }
+
+  addLogEntry(message, type = 'system') {
+    const logBox = document.getElementById('game-log-box');
+    if (!logBox) return;
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.textContent = message;
+    logBox.appendChild(entry);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  checkStateChangesAndLog(oldStreet, oldActivePlayerIdx) {
+    const currentStreet = this.game.street;
+    
+    // 1. Check if street transitioned
+    if (currentStreet !== oldStreet) {
+      this.isStreetDealt = true;
+      if (currentStreet === 'flop') {
+        const cards = this.game.communityCards.join(' ');
+        this.addLogEntry(`--- Flop Dealt: [${cards}] ---`, 'street');
+      } else if (currentStreet === 'turn') {
+        const cards = this.game.communityCards.join(' ');
+        this.addLogEntry(`--- Turn Dealt: [${cards}] ---`, 'street');
+      } else if (currentStreet === 'river') {
+        const cards = this.game.communityCards.join(' ');
+        this.addLogEntry(`--- River Dealt: [${cards}] ---`, 'street');
+      } else if (currentStreet === 'showdown') {
+        this.addLogEntry(`--- Showdown ---`, 'street');
+        this.logShowdownResults();
+      }
+    }
+
+    // 2. Check if turn transitioned back to Hero
+    if (oldActivePlayerIdx !== 0 && this.game.activePlayerIdx === 0) {
+      this.coachUnlocked = false;
+    }
+  }
+
+  logShowdownResults() {
+    const inHand = this.game.players.filter(p => p.isActive && !p.hasFolded);
+    if (inHand.length === 0) return;
+
+    // Check if only 1 player won because everyone else folded
+    if (inHand.length === 1) {
+      this.addLogEntry(`🏆 ${inHand[0].name} wins the pot (Everyone else folded).`, 'system');
+      return;
+    }
+
+    let bestScore = -1;
+    let winners = [];
+    const evaluations = [];
+
+    inHand.forEach(p => {
+      const seven = [...p.cards, ...this.game.communityCards];
+      const ev = evaluate7(seven);
+      const score = ev?.score || 0;
+      evaluations.push({ player: p, score, ev });
+      
+      if (score > bestScore) {
+        bestScore = score;
+        winners = [p];
+      } else if (score === bestScore) {
+        winners.push(p);
+      }
+    });
+
+    // Log what each player holds
+    evaluations.forEach(item => {
+      const cardsStr = item.player.cards.join(' ');
+      const handName = item.ev?.categoryName || 'High Card';
+      this.addLogEntry(`${item.player.name} shows [${cardsStr}] (${handName}).`, 'showdown');
+    });
+
+    // Log the winner(s)
+    const winnerNames = winners.map(w => w.name).join(' & ');
+    this.addLogEntry(`🏆 ${winnerNames} wins the pot!`, 'system');
+  }
+
+  scheduleBotTurn() {
+    this.isBotThinking = true;
+    
+    // 1. Deactivate action buttons and show that bots are thinking
+    this.updateActionDashboard();
+    
+    // 2. Re-render the table so that the active seat gets the 'thinking' class
+    const activePlayer = this.game.players[this.game.activePlayerIdx];
+    const seatDiv = document.querySelector(`.player-seat[data-seat="${activePlayer.id}"]`);
+    if (seatDiv) {
+      seatDiv.classList.add('thinking');
+    }
+
+    // 3. Wait for 800ms to simulate bot thinking
+    setTimeout(() => {
+      this.executeBotTurn();
+    }, 800);
+  }
+
+  executeBotTurn() {
+    // If the active player changed or game ended while waiting, abort
+    if (this.game.activePlayerIdx === -1 || this.game.activePlayerIdx === 0 || this.game.street === 'showdown') {
+      this.isBotThinking = false;
+      this.renderPokerTable();
+      this.updateGTORecommendations();
+      return;
+    }
+
+    const activePlayer = this.game.players[this.game.activePlayerIdx];
+    
+    // 1. Get GTO advice for the bot's current state
+    const bundle = this.game.getGameStateBundle();
+    const advice = getGTOAdvice(bundle);
+    const weights = advice.weights;
+
+    // 2. Roll a GTO probabilistic decision
+    const rand = Math.random() * 100;
+    let actionChosen = 'fold';
+
+    if (rand < weights.raise) {
+      actionChosen = 'raise';
+    } else if (rand < weights.raise + weights.call) {
+      actionChosen = 'call';
+    } else if (rand < weights.raise + weights.call + weights.check) {
+      actionChosen = 'check';
+    } else {
+      actionChosen = 'fold';
+    }
+
+    // Normalize check/call depending on facing bets
+    const lastBetSize = this.game.currentBet;
+    const playerBetMatched = activePlayer.bet;
+
+    if (actionChosen === 'check' && lastBetSize > playerBetMatched) {
+      actionChosen = 'call';
+    }
+    if (actionChosen === 'call' && lastBetSize === playerBetMatched) {
+      actionChosen = 'check';
+    }
+
+    // Determine target raise/bet amount if action is raise
+    let amount = 0;
+    if (actionChosen === 'raise') {
+      const minRaise = lastBetSize === 0 ? this.game.bigBlind : lastBetSize * 2;
+      const maxRaise = activePlayer.chips + playerBetMatched;
+      const totalPot = this.game.pot + this.game.players.reduce((sum, p) => sum + p.bet, 0);
+
+      amount = lastBetSize === 0 
+        ? Math.floor(totalPot / 2) 
+        : lastBetSize * 3;
+      amount = Math.max(minRaise, Math.min(maxRaise, amount));
+    }
+
+    // 3. Log the action
+    let logMessage = '';
+    const posLabel = activePlayer.position ? ` (${activePlayer.position})` : '';
+    if (actionChosen === 'fold') {
+      logMessage = `${activePlayer.name}${posLabel} folds.`;
+    } else if (actionChosen === 'check') {
+      logMessage = `${activePlayer.name}${posLabel} checks.`;
+    } else if (actionChosen === 'call') {
+      const callDiff = lastBetSize - playerBetMatched;
+      const actualCall = Math.min(callDiff, activePlayer.chips);
+      logMessage = `${activePlayer.name}${posLabel} calls $${actualCall}.`;
+    } else if (actionChosen === 'raise') {
+      if (lastBetSize === 0) {
+        logMessage = `${activePlayer.name}${posLabel} bets $${amount}.`;
+      } else {
+        logMessage = `${activePlayer.name}${posLabel} raises to $${amount}.`;
+      }
+    }
+
+    this.addLogEntry(logMessage, actionChosen);
+
+    // 4. Process the action in the game engine
+    const oldStreet = this.game.street;
+    const oldActiveIdx = this.game.activePlayerIdx;
+
+    this.game.processAction(actionChosen, amount);
+    
+    this.checkStateChangesAndLog(oldStreet, oldActiveIdx);
+
+    this.isBotThinking = false;
+
+    // 5. Render and continue loops
+    this.renderPokerTable();
+    this.updateGTORecommendations();
+  }
+
+  updateRaiseButtonText() {
+    const raiseSlider = document.getElementById('raise-amount-slider');
+    const raiseBtn = document.getElementById('action-raise');
+    const multLabel = document.getElementById('slider-multiplier-label');
+    const potDesc = document.getElementById('slider-pot-desc');
+
+    if (raiseSlider && raiseBtn) {
+      const value = parseInt(raiseSlider.value);
+      const lastBetSize = this.game.currentBet;
+      const activePlayer = this.game.players[this.game.activePlayerIdx];
+      const playerBetMatched = activePlayer ? activePlayer.bet : 0;
+      const callAmt = Math.max(0, lastBetSize - playerBetMatched);
+      const totalPot = this.game.pot + this.game.players.reduce((sum, p) => sum + p.bet, 0);
+
+      if (lastBetSize === 0) {
+        raiseBtn.textContent = `Bet $${value}`;
+        if (totalPot > 0) {
+          const mult = (value / totalPot).toFixed(2);
+          if (multLabel) multLabel.textContent = `Bet Size: ${mult}x Pot`;
+        } else {
+          const bbMult = (value / this.game.bigBlind).toFixed(1);
+          if (multLabel) multLabel.textContent = `Bet Size: ${bbMult}x BB`;
+        }
+      } else {
+        raiseBtn.textContent = `Raise to $${value} (+$${callAmt} Call)`;
+        const raiseAmt = value - lastBetSize;
+        const potAfterCall = totalPot + callAmt;
+        if (potAfterCall > 0) {
+          const mult = (raiseAmt / potAfterCall).toFixed(2);
+          if (multLabel) multLabel.textContent = `Raise Size: ${mult}x Pot`;
+        } else {
+          if (multLabel) multLabel.textContent = `Raise`;
+        }
+      }
+
+      if (potDesc) {
+        potDesc.textContent = `Current Pot: $${totalPot}`;
+      }
     }
   }
 
@@ -582,8 +994,11 @@ export class UIManager {
     const activeSeatCount = this.game.getActivePlayers().length;
 
     this.game.players.forEach(p => {
+      // Determine if this seat should show thinking overlay
+      const isBotAndThinking = (this.game.activePlayerIdx === p.id && p.id !== 0 && this.isBotThinking);
+      
       const seatDiv = document.createElement('div');
-      seatDiv.className = `player-seat ${!p.isActive ? 'empty' : ''} ${this.game.activePlayerIdx === p.id ? 'active' : ''}`;
+      seatDiv.className = `player-seat ${!p.isActive ? 'empty' : ''} ${this.game.activePlayerIdx === p.id ? 'active' : ''} ${isBotAndThinking ? 'thinking' : ''}`;
       seatDiv.setAttribute('data-seat', p.id);
 
       if (!p.isActive) {
@@ -605,14 +1020,24 @@ export class UIManager {
         });
       } else {
         // Seat contains active player
-        let card1Html = `<div class="poker-card empty-slot" data-slot="0"></div>`;
-        let card2Html = `<div class="poker-card empty-slot" data-slot="1"></div>`;
+        let card1Html = `<div class="poker-card-wrapper empty-slot" data-slot="0"></div>`;
+        let card2Html = `<div class="poker-card-wrapper empty-slot" data-slot="1"></div>`;
+
+        const revealToggle = document.getElementById('toggle-reveal-opponent-cards');
+        const revealEnabled = revealToggle ? revealToggle.checked : false;
+        
+        // Face down condition: is bot AND God Mode is off AND hasn't folded AND hasn't been manually peeking-revealed
+        const isManuallyRevealed = this.manuallyRevealedPlayers.has(p.id);
+        const isFaceDown = p.id !== 0 && this.game.street !== 'showdown' && !revealEnabled && !p.hasFolded && !isManuallyRevealed;
+
+        // Use staggered delay indices only on fresh street/hand dealing triggers
+        const staggerIdx = this.isStreetDealt ? p.id : null;
 
         if (p.cards[0]) {
-          card1Html = this.renderCardHtml(p.cards[0], p.id, 0);
+          card1Html = this.renderCardHtml(p.cards[0], p.id, 0, isFaceDown, staggerIdx);
         }
         if (p.cards[1]) {
-          card2Html = this.renderCardHtml(p.cards[1], p.id, 1);
+          card2Html = this.renderCardHtml(p.cards[1], p.id, 1, isFaceDown, staggerIdx);
         }
 
         const actionText = p.hasFolded ? 'FOLDED' : (p.hasActed && p.bet > 0 ? 'BETTING' : '');
@@ -629,12 +1054,47 @@ export class UIManager {
           </div>
         `;
 
-        // Handle seat card selections
-        seatDiv.querySelectorAll('.poker-card.empty-slot, .poker-card.filled').forEach(cardEl => {
+        // Handle seat card interactions based on current Active Mode
+        const seatCardEl = seatDiv.querySelector('.seat-card');
+        if (seatCardEl) {
+          seatCardEl.addEventListener('click', () => {
+            if (this.gameMode === 'play' && p.id > 0) {
+              if (this.manuallyRevealedPlayers.has(p.id)) {
+                this.manuallyRevealedPlayers.delete(p.id);
+                this.addLogEntry(`Flipped opponent ${p.name}'s cards face-down.`, 'bot');
+              } else {
+                this.manuallyRevealedPlayers.add(p.id);
+                this.addLogEntry(`Flipped opponent ${p.name}'s cards face-up: [${p.cards.join(' ')}].`, 'gto');
+              }
+              this.renderPokerTable();
+              this.updateGTORecommendations();
+            }
+          });
+        }
+
+        seatDiv.querySelectorAll('.poker-card-wrapper').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
-            e.stopPropagation();
+            e.stopPropagation(); // prevent seat card bubble triggers
             const slot = parseInt(cardEl.getAttribute('data-slot'));
-            this.openCardSelector('player', p.id, slot);
+            
+            if (this.gameMode === 'edit') {
+              this.openCardSelector('player', p.id, slot);
+            } else {
+              // Trigger same flip peeking logic as seat card clicking in Play Mode
+              if (p.id > 0) {
+                if (this.manuallyRevealedPlayers.has(p.id)) {
+                  this.manuallyRevealedPlayers.delete(p.id);
+                  this.addLogEntry(`Flipped opponent ${p.name}'s cards face-down.`, 'bot');
+                } else {
+                  this.manuallyRevealedPlayers.add(p.id);
+                  this.addLogEntry(`Flipped opponent ${p.name}'s cards face-up: [${p.cards.join(' ')}].`, 'gto');
+                }
+                this.renderPokerTable();
+                this.updateGTORecommendations();
+              } else {
+                this.addLogEntry('These are your hole cards! Try to play optimal GTO strategies using your own brain.', 'hero');
+              }
+            }
           });
         });
       }
@@ -672,14 +1132,15 @@ export class UIManager {
       for (let i = 0; i < 5; i++) {
         const cCard = this.game.communityCards[i];
         if (cCard) {
-          commContainer.innerHTML += this.renderCardHtml(cCard, null, i);
+          const staggerIdx = this.isStreetDealt ? i : null;
+          commContainer.innerHTML += this.renderCardHtml(cCard, null, i, false, staggerIdx);
         } else {
-          commContainer.innerHTML += `<div class="poker-card empty-slot" data-slot="${i}"></div>`;
+          commContainer.innerHTML += `<div class="poker-card-wrapper empty-slot" data-slot="${i}"></div>`;
         }
       }
 
       // Add listeners to community slots
-      commContainer.querySelectorAll('.poker-card').forEach(cardEl => {
+      commContainer.querySelectorAll('.poker-card-wrapper').forEach(cardEl => {
         cardEl.addEventListener('click', () => {
           const slot = parseInt(cardEl.getAttribute('data-slot'));
           this.openCardSelector('community', null, slot);
@@ -695,18 +1156,34 @@ export class UIManager {
 
     // 4. Highlight action dashboard buttons
     this.updateActionDashboard();
+
+    // 5. Trigger Bot Autoplay if applicable
+    if (this.game.activePlayerIdx !== -1 && this.game.activePlayerIdx !== 0 && this.game.street !== 'showdown') {
+      if (!this.isBotThinking) {
+        this.scheduleBotTurn();
+      }
+    }
+
+    // Reset street deal trigger at the very end of the loop
+    this.isStreetDealt = false;
   }
 
-  renderCardHtml(card, playerIdx, slotIdx) {
+  renderCardHtml(card, playerIdx, slotIdx, isFaceDown = false, staggerIdx = null) {
     const rank = card[0];
     const suit = card[1];
     const suitSymbol = SUIT_SYMBOLS[suit];
     const isRed = ['h', 'd'].includes(suit);
+    const animClass = staggerIdx !== null ? `deal-anim delay-${staggerIdx}` : '';
 
     return `
-      <div class="poker-card filled ${isRed ? 'red' : 'black'}" data-slot="${slotIdx}" ${playerIdx !== null ? `data-player="${playerIdx}"` : 'data-comm'}>
-        <div>${rank}</div>
-        <div style="font-size: 1.15rem; align-self: flex-end">${suitSymbol}</div>
+      <div class="poker-card-wrapper ${isFaceDown ? 'face-down' : ''} filled ${animClass}" data-slot="${slotIdx}" ${playerIdx !== null ? `data-player="${playerIdx}"` : 'data-comm'}>
+        <div class="poker-card-inner">
+          <div class="card-front ${isRed ? 'red' : 'black'}">
+            <span class="card-rank">${rank}</span>
+            <span class="card-suit">${suitSymbol}</span>
+          </div>
+          <div class="card-back"></div>
+        </div>
       </div>
     `;
   }
@@ -719,7 +1196,11 @@ export class UIManager {
     const raiseSlider = document.getElementById('raise-amount-slider');
     const sliderContainer = document.querySelector('.slider-container');
 
-    if (!activePlayer) {
+    // Determine if user controls should be completely disabled (because it's a bot's turn or bot is thinking)
+    const isBotTurn = (this.game.activePlayerIdx !== -1 && this.game.activePlayerIdx !== 0);
+    const disableControls = isBotTurn || this.isBotThinking;
+
+    if (!activePlayer || this.game.street === 'showdown') {
       // Game showdown or paused
       document.querySelectorAll('.action-dashboard .action-btn').forEach(b => b.style.display = 'none');
       if (sliderContainer) sliderContainer.style.display = 'none';
@@ -727,8 +1208,22 @@ export class UIManager {
     }
 
     // Unhide buttons
-    document.querySelectorAll('.action-dashboard .action-btn').forEach(b => b.style.display = 'inline-block');
-    if (sliderContainer) sliderContainer.style.display = 'flex';
+    document.querySelectorAll('.action-dashboard .action-btn').forEach(b => {
+      b.style.display = 'inline-block';
+      b.disabled = disableControls;
+      b.style.opacity = disableControls ? '0.4' : '1';
+      b.style.pointerEvents = disableControls ? 'none' : 'auto';
+    });
+    
+    if (sliderContainer) {
+      sliderContainer.style.display = 'flex';
+      sliderContainer.style.opacity = disableControls ? '0.4' : '1';
+      sliderContainer.style.pointerEvents = disableControls ? 'none' : 'auto';
+    }
+
+    if (raiseSlider) {
+      raiseSlider.disabled = disableControls;
+    }
 
     const lastBetSize = this.game.currentBet;
     const playerBetMatched = activePlayer.bet;
@@ -753,9 +1248,13 @@ export class UIManager {
     if (raiseSlider) {
       raiseSlider.min = minRaise;
       raiseSlider.max = maxRaise;
-      raiseSlider.value = minRaise;
+      // Only reset the slider value if it is out of bounds
+      const curVal = parseInt(raiseSlider.value);
+      if (curVal < minRaise || curVal > maxRaise) {
+        raiseSlider.value = minRaise;
+      }
       const display = document.getElementById('raise-slider-value');
-      if (display) display.textContent = `$${minRaise}`;
+      if (display) display.textContent = `$${raiseSlider.value}`;
     }
 
     if (activePlayer.chips <= 0 || minRaise > maxRaise) {
@@ -764,16 +1263,29 @@ export class UIManager {
     } else {
       if (raiseBtn) {
         raiseBtn.style.display = 'inline-block';
-        raiseBtn.textContent = lastBetSize === 0 ? 'Bet' : 'Raise';
+        this.updateRaiseButtonText();
       }
     }
   }
 
-  // --- Real-time GTO AI Advisor panel ---
   updateGTORecommendations() {
     const activePlayer = this.game.players[this.game.activePlayerIdx];
     const recContainer = document.getElementById('rec-action-chart');
     const commentaryEl = document.getElementById('rec-commentary-text');
+
+    const coachToggle = document.getElementById('toggle-gto-coach');
+    const gtoWrapper = document.getElementById('gto-advisor-wrapper');
+    const gtoPanel = document.getElementById('gto-advisor-panel');
+    const isCoachEnabled = coachToggle ? coachToggle.checked : true;
+
+    // 1. Remove existing locked glass overlays & blur mask
+    const existingOverlay = gtoWrapper ? gtoWrapper.querySelector('.advisor-lock-overlay') : null;
+    if (existingOverlay) {
+      existingOverlay.remove();
+    }
+    if (gtoPanel) {
+      gtoPanel.classList.remove('gto-blur-mask');
+    }
 
     if (!activePlayer || this.game.street === 'showdown') {
       if (commentaryEl) commentaryEl.innerHTML = '<p>Hand completed. Showdown calculations executed. Click <strong>RESET HAND</strong> to play another scenario.</p>';
@@ -783,18 +1295,18 @@ export class UIManager {
       return;
     }
 
-    // 1. Live Equity Monte Carlo Calculations
+    // 2. Live Equity Monte Carlo Calculations
     const inHandPlayers = this.game.getPlayersInHand();
     const result = runMonteCarlo(inHandPlayers, this.game.communityCards, 1500);
     const activeEquity = result.find(r => r.id === activePlayer.id)?.equity || 0;
 
     document.getElementById('live-equity-stat').textContent = `${(activeEquity * 100).toFixed(1)}%`;
 
-    // 2. Hand strength classification
+    // 3. Hand strength classification
     const handClass = classifyHandStrength(activePlayer.cards, this.game.communityCards);
     document.getElementById('live-hand-strength').textContent = `${handClass.madeClass} (${handClass.drawClass !== 'None' ? handClass.drawClass : 'No Draw'})`;
 
-    // 3. AI recommendation weights and text commentaries
+    // 4. AI recommendation weights and text commentaries
     const bundle = this.game.getGameStateBundle();
     const advice = getGTOAdvice(bundle);
 
@@ -827,6 +1339,36 @@ export class UIManager {
           recContainer.appendChild(item);
         }
       });
+    }
+
+    // 5. Apply Glassmorphic Lock if Hero's turn, coach is enabled, and coach is NOT unlocked
+    if (this.game.activePlayerIdx === 0 && isCoachEnabled && !this.coachUnlocked) {
+      if (gtoWrapper && gtoPanel) {
+        gtoPanel.classList.add('gto-blur-mask');
+
+        const overlay = document.createElement('div');
+        overlay.className = 'advisor-lock-overlay';
+        overlay.innerHTML = `
+          <div class="lock-icon">🔒</div>
+          <h4>GTO Coach Locked</h4>
+          <p>Trust your instincts! Try to play optimal preflop/postflop strategies with your own brain. When you're ready to learn, unlock the advisor.</p>
+          <button class="unlock-btn" id="btn-unlock-gto">Unlock GTO Advice</button>
+        `;
+
+        gtoWrapper.appendChild(overlay);
+
+        const unlockBtn = overlay.querySelector('#btn-unlock-gto');
+        if (unlockBtn) {
+          unlockBtn.addEventListener('click', () => {
+            this.coachUnlocked = true;
+            overlay.style.animation = 'fadeOut 0.3s ease forwards';
+            gtoPanel.style.filter = 'blur(0px)';
+            setTimeout(() => {
+              this.updateGTORecommendations();
+            }, 300);
+          });
+        }
+      }
     }
   }
 
