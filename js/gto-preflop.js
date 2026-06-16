@@ -1,6 +1,6 @@
 /* --- GTO Preflop Range Database & Parser --- */
 
-import { RANK_CHARS } from './evaluator.js';
+import { RANK_CHARS } from './evaluator.js?v=20260616a';
 
 // Convert a hand string like "AKs" or "72o" or "JJ" into its (row, col) in a 13x13 starting hand grid
 // The grid is indexed Ace (0) to 2 (12)

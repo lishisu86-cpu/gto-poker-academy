@@ -1,7 +1,7 @@
 /* --- Main Application Bootstrap & Coordination --- */
 
-import { PokerGame } from './poker-game.js';
-import { UIManager } from './ui-manager.js';
+import { PokerGame } from './poker-game.js?v=20260616a';
+import { UIManager } from './ui-manager.js?v=20260616a';
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. Instantiate Core Poker State Engine

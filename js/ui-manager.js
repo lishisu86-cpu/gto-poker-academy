@@ -1,9 +1,9 @@
 /* --- UI Manager: Grid Renderers, Table Graphics, and Modal Handlers --- */
 
-import { coordsToHand, getStrategyGrid } from './gto-preflop.js';
-import { runMonteCarlo, SUIT_SYMBOLS } from './evaluator.js';
-import { getGTOAdvice, classifyHandStrength, analyzeBoardTexture } from './gto-postflop.js';
-import { AudioManager } from './audio-manager.js';
+import { coordsToHand, getStrategyGrid } from './gto-preflop.js?v=20260616a';
+import { runMonteCarlo, SUIT_SYMBOLS } from './evaluator.js?v=20260616a';
+import { getGTOAdvice, classifyHandStrength, analyzeBoardTexture } from './gto-postflop.js?v=20260616a';
+import { AudioManager } from './audio-manager.js?v=20260616a';
 
 export class UIManager {
   constructor(game) {

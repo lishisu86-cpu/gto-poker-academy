@@ -1,6 +1,6 @@
 /* --- Texas Hold'em Game Engine & 9-Max State Machine --- */
 
-import { evaluate7, RANK_CHARS, SUIT_CHARS } from './evaluator.js';
+import { evaluate7, RANK_CHARS, SUIT_CHARS } from './evaluator.js?v=20260616a';
 
 export const ST_PREFLOP = 'preflop';
 export const ST_FLOP = 'flop';

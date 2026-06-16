@@ -1,6 +1,6 @@
 /* --- GTO Postflop Board Texture Analyzer & Heuristics Advisor --- */
 
-import { evaluate7, parseCard, RANK_CHARS } from './evaluator.js';
+import { evaluate7, parseCard, RANK_CHARS } from './evaluator.js?v=20260616a';
 
 /**
  * Analyzes community cards to determine texture:
