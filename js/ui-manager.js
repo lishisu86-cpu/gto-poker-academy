@@ -595,6 +595,9 @@ export class UIManager {
         if (act === 'raise') {
           const slider = document.getElementById('raise-amount-slider');
           amount = parseInt(slider?.value || 0);
+        } else if (act === 'allin') {
+          const activePlayer = this.game.players[this.game.activePlayerIdx];
+          amount = activePlayer.chips + activePlayer.bet;
         }
 
         const activePlayer = this.game.players[this.game.activePlayerIdx];
@@ -617,12 +620,14 @@ export class UIManager {
           } else {
             logMessage = `Hero raises to $${amount}.`;
           }
+        } else if (act === 'allin') {
+          logMessage = `Hero goes All-In for $${amount}! 💥`;
         }
         
         // Play action sound
         if (act === 'fold' || act === 'check') {
           this.audio.playFold();
-        } else if (act === 'call' || act === 'raise') {
+        } else if (act === 'call' || act === 'raise' || act === 'allin') {
           this.audio.playChip();
         }
 
@@ -631,7 +636,8 @@ export class UIManager {
         const oldStreet = this.game.street;
         const oldActiveIdx = this.game.activePlayerIdx;
 
-        this.game.processAction(act, amount);
+        const engineAction = (act === 'allin') ? 'raise' : act;
+        this.game.processAction(engineAction, amount);
 
         this.checkStateChangesAndLog(oldStreet, oldActiveIdx);
         this.renderPokerTable();
@@ -796,21 +802,42 @@ export class UIManager {
     // 1. Check if street transitioned
     if (currentStreet !== oldStreet) {
       this.isStreetDealt = true;
-      if (currentStreet === 'flop') {
-        const cards = this.game.communityCards.join(' ');
-        this.addLogEntry(`--- Flop Dealt: [${cards}] ---`, 'street');
-        this.audio.playCardDeal();
-      } else if (currentStreet === 'turn') {
-        const cards = this.game.communityCards.join(' ');
-        this.addLogEntry(`--- Turn Dealt: [${cards}] ---`, 'street');
-        this.audio.playCardDeal();
-      } else if (currentStreet === 'river') {
-        const cards = this.game.communityCards.join(' ');
-        this.addLogEntry(`--- River Dealt: [${cards}] ---`, 'street');
-        this.audio.playCardDeal();
-      } else if (currentStreet === 'showdown') {
+
+      // Log runout intermediate streets if we went straight to showdown from a previous street
+      if (currentStreet === 'showdown') {
+        if (oldStreet === 'preflop') {
+          const flopCards = this.game.communityCards.slice(0, 3).join(' ');
+          const turnCard = this.game.communityCards[3];
+          const riverCard = this.game.communityCards[4];
+          this.addLogEntry(`--- Runout Flop: [${flopCards}] ---`, 'street');
+          this.addLogEntry(`--- Runout Turn: [${turnCard}] ---`, 'street');
+          this.addLogEntry(`--- Runout River: [${riverCard}] ---`, 'street');
+        } else if (oldStreet === 'flop') {
+          const turnCard = this.game.communityCards[3];
+          const riverCard = this.game.communityCards[4];
+          this.addLogEntry(`--- Runout Turn: [${turnCard}] ---`, 'street');
+          this.addLogEntry(`--- Runout River: [${riverCard}] ---`, 'street');
+        } else if (oldStreet === 'turn') {
+          const riverCard = this.game.communityCards[4];
+          this.addLogEntry(`--- Runout River: [${riverCard}] ---`, 'street');
+        }
+        
         this.addLogEntry(`--- Showdown ---`, 'street');
         this.logShowdownResults();
+      } else {
+        if (currentStreet === 'flop') {
+          const cards = this.game.communityCards.join(' ');
+          this.addLogEntry(`--- Flop Dealt: [${cards}] ---`, 'street');
+          this.audio.playCardDeal();
+        } else if (currentStreet === 'turn') {
+          const cards = this.game.communityCards.join(' ');
+          this.addLogEntry(`--- Turn Dealt: [${cards}] ---`, 'street');
+          this.audio.playCardDeal();
+        } else if (currentStreet === 'river') {
+          const cards = this.game.communityCards.join(' ');
+          this.addLogEntry(`--- River Dealt: [${cards}] ---`, 'street');
+          this.audio.playCardDeal();
+        }
       }
     }
 
@@ -1235,6 +1262,7 @@ export class UIManager {
     const checkBtn = document.getElementById('action-check');
     const callBtn = document.getElementById('action-call');
     const raiseBtn = document.getElementById('action-raise');
+    const allinBtn = document.getElementById('action-allin');
     const raiseSlider = document.getElementById('raise-amount-slider');
     const sliderContainer = document.querySelector('.slider-container');
 
@@ -1328,6 +1356,15 @@ export class UIManager {
       if (raiseBtn) {
         raiseBtn.style.display = 'inline-block';
         this.updateRaiseButtonText();
+      }
+    }
+
+    if (allinBtn) {
+      if (activePlayer.chips <= 0) {
+        allinBtn.style.display = 'none';
+      } else {
+        allinBtn.style.display = 'inline-block';
+        allinBtn.textContent = `All-In ($${activePlayer.chips})`;
       }
     }
   }

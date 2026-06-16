@@ -253,10 +253,19 @@ export class PokerGame {
     }
 
     // 2. Check if betting round for current street is complete
-    const isRoundComplete = inHand.every(p => p.hasActed && p.bet === this.currentBet);
+    // A player has completed their action if they have folded, are all-in (chips === 0), or have acted and matched the currentBet
+    const isRoundComplete = inHand.every(p => {
+      return p.hasFolded || p.chips === 0 || (p.hasActed && p.bet === this.currentBet);
+    });
 
     if (isRoundComplete) {
-      this.advanceStreet();
+      // If the betting round is complete, check if we are in an All-In Runout scenario
+      const withChips = inHand.filter(p => p.chips > 0);
+      if (withChips.length <= 1) {
+        this.runAllInRunout();
+      } else {
+        this.advanceStreet();
+      }
     } else {
       this.moveToNextPlayer();
     }
@@ -264,7 +273,7 @@ export class PokerGame {
 
   moveToNextPlayer() {
     let nextIdx = (this.activePlayerIdx + 1) % this.numSeats;
-    while (!this.players[nextIdx].isActive || this.players[nextIdx].hasFolded) {
+    while (!this.players[nextIdx].isActive || this.players[nextIdx].hasFolded || this.players[nextIdx].chips === 0) {
       nextIdx = (nextIdx + 1) % this.numSeats;
     }
     this.activePlayerIdx = nextIdx;
@@ -296,12 +305,42 @@ export class PokerGame {
       return;
     }
 
-    // Set first to act for post-flop (Small Blind or first active player left of Dealer button)
+    // Set first to act for post-flop (Small Blind or first active player left of Dealer button with chips)
     let actIdx = (this.dealerIdx + 1) % this.numSeats;
-    while (!this.players[actIdx].isActive || this.players[actIdx].hasFolded) {
+    while (!this.players[actIdx].isActive || this.players[actIdx].hasFolded || this.players[actIdx].chips === 0) {
       actIdx = (actIdx + 1) % this.numSeats;
     }
     this.activePlayerIdx = actIdx;
+  }
+
+  runAllInRunout() {
+    // Collect all bets into the pot
+    this.players.forEach(p => {
+      this.pot += p.bet;
+      p.bet = 0;
+      p.hasActed = false;
+    });
+    this.currentBet = 0;
+    this.lastBet = 0;
+
+    // Deal remaining streets to the end
+    while (this.street !== ST_SHOWDOWN) {
+      if (this.street === ST_PREFLOP) {
+        this.street = ST_FLOP;
+        this.communityCards = [this.drawCard(), this.drawCard(), this.drawCard()];
+      } else if (this.street === ST_FLOP) {
+        this.street = ST_TURN;
+        this.communityCards.push(this.drawCard());
+      } else if (this.street === ST_TURN) {
+        this.street = ST_RIVER;
+        this.communityCards.push(this.drawCard());
+      } else if (this.street === ST_RIVER) {
+        this.street = ST_SHOWDOWN;
+        break;
+      }
+    }
+
+    this.resolveShowdown();
   }
 
   awardPot(winner) {
