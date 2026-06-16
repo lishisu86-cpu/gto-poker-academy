@@ -494,7 +494,8 @@ export class UIManager {
     if (weights.raise > 0 && weights.fold > 0) {
       if (isSuited && ['A', 'K'].includes(r1) && !['Q', 'J'].includes(r2)) {
         return `混合策略 (Raise ${weights.raise}% / Fold ${weights.fold}%)。同花 A 弱高张（如 A5s-A2s）是 GTO 中经典的“3-Bet 诈唬候选牌”。它们阻挡了对手的 AA/AK，且翻后极具同花、顺子和两对潜力。混合频率可以完美平衡我们的范围。`;
-        return `混合加注策略 (Raise ${weights.raise}% / Fold ${weights.fold}%)。该手牌处于可玩与不可玩的边缘。GTO 使用混合频率进行开池或 3-Bet，能有效迷惑对手，并让我们的策略达到纳什均衡状态，不可被剥削。`;
+      }
+      return `混合加注策略 (Raise ${weights.raise}% / Fold ${weights.fold}%)。该手牌处于可玩与不可玩的边缘。GTO 使用混合频率进行开池或 3-Bet，能有效迷惑对手，并让我们的策略达到纳什均衡状态，不可被剥削。`;
     }
 
     if (weights.call > 0 && weights.fold > 0) {
