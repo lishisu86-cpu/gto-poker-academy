@@ -583,7 +583,7 @@ export class UIManager {
     }
 
     // Setup action buttons click events
-    const actBtns = document.querySelectorAll('.action-dashboard .action-btn');
+    const actBtns = document.querySelectorAll('.action-dashboard .action-btn:not(.reset-btn)');
     actBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         if (this.isBotThinking) return;
@@ -1063,9 +1063,9 @@ export class UIManager {
         const revealToggle = document.getElementById('toggle-reveal-opponent-cards');
         const revealEnabled = revealToggle ? revealToggle.checked : false;
         
-        // Face down condition: is bot AND God Mode is off AND hasn't folded AND hasn't been manually peeking-revealed
+        // Face down condition: is bot AND God Mode is off AND hasn't been manually peeking-revealed
         const isManuallyRevealed = this.manuallyRevealedPlayers.has(p.id);
-        const isFaceDown = p.id !== 0 && this.game.street !== 'showdown' && !revealEnabled && !p.hasFolded && !isManuallyRevealed;
+        const isFaceDown = p.id !== 0 && this.game.street !== 'showdown' && !revealEnabled && !isManuallyRevealed;
 
         // Use staggered delay indices only on fresh street/hand dealing triggers
         const staggerIdx = this.isStreetDealt ? p.id : null;
@@ -1238,19 +1238,41 @@ export class UIManager {
     const raiseSlider = document.getElementById('raise-amount-slider');
     const sliderContainer = document.querySelector('.slider-container');
 
+    const resetHandBtn = document.getElementById('btn-reset-hand');
+    const nextStreetBtn = document.getElementById('btn-next-street');
+
+    // Reset hand button should always be visible and active at any time
+    if (resetHandBtn) {
+      resetHandBtn.style.display = 'inline-block';
+      resetHandBtn.disabled = false;
+      resetHandBtn.style.opacity = '1';
+      resetHandBtn.style.pointerEvents = 'auto';
+    }
+    // Deal street button is Sandbox Mode only
+    if (nextStreetBtn) {
+      if (this.gameMode === 'edit') {
+        nextStreetBtn.style.display = 'inline-block';
+        nextStreetBtn.disabled = false;
+        nextStreetBtn.style.opacity = '1';
+        nextStreetBtn.style.pointerEvents = 'auto';
+      } else {
+        nextStreetBtn.style.display = 'none';
+      }
+    }
+
     // Determine if user controls should be completely disabled (because it's a bot's turn or bot is thinking)
     const isBotTurn = (this.game.activePlayerIdx !== -1 && this.game.activePlayerIdx !== 0);
     const disableControls = isBotTurn || this.isBotThinking;
 
     if (!activePlayer || this.game.street === 'showdown') {
       // Game showdown or paused
-      document.querySelectorAll('.action-dashboard .action-btn').forEach(b => b.style.display = 'none');
+      document.querySelectorAll('.action-dashboard .action-btn:not(.reset-btn)').forEach(b => b.style.display = 'none');
       if (sliderContainer) sliderContainer.style.display = 'none';
       return;
     }
 
-    // Unhide buttons
-    document.querySelectorAll('.action-dashboard .action-btn').forEach(b => {
+    // Unhide play action buttons
+    document.querySelectorAll('.action-dashboard .action-btn:not(.reset-btn)').forEach(b => {
       b.style.display = 'inline-block';
       b.disabled = disableControls;
       b.style.opacity = disableControls ? '0.4' : '1';
