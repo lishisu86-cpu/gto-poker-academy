@@ -1,6 +1,7 @@
 /* --- GTO Postflop Board Texture Analyzer & Heuristics Advisor --- */
 
 import { evaluate7, parseCard, RANK_CHARS } from './evaluator.js?v=20260616a';
+import { PREFLOP_DATA, parseRangeFormula } from './gto-preflop.js?v=20260616a';
 
 /**
  * Analyzes community cards to determine texture:
@@ -172,16 +173,53 @@ export function classifyHandStrength(playerCards, boardCards) {
  *   commentary: Markdown text explaining the strategy
  * }
  */
+/**
+ * Normalizes positions (e.g. LJ, HJ, UTG+1) to standard preflop keys.
+ */
+function normalizePosition(pos) {
+  if (!pos) return 'BTN';
+  const u = pos.toUpperCase();
+  if (u.includes('BTN')) return 'BTN';
+  if (u.includes('SB')) return 'SB';
+  if (u.includes('BB')) return 'BB';
+  if (u.includes('UTG+1')) return 'UTG';
+  if (u.includes('UTG')) return 'UTG';
+  if (u.includes('LJ')) return 'MP';
+  if (u.includes('HJ')) return 'CO';
+  if (u.includes('MP')) return 'MP';
+  if (u.includes('CO')) return 'CO';
+  return 'BTN';
+}
+
+/**
+ * Computes GTO Heuristics advice.
+ * Returns: {
+ *   weights: { raise: %, call: %, check: %, fold: % },
+ *   commentary: Markdown text explaining the strategy
+ * }
+ */
 export function getGTOAdvice(gameState) {
   const { street, boardCards, activePlayer, pot, lastBet, currentBet } = gameState;
   const { position, cards, chips } = activePlayer;
 
   // 1. Preflop Advice
   if (street === 'preflop') {
-    // If facing no bets (RFI)
-    const isFacingBet = currentBet > 0 || lastBet > 0;
-    const situation = isFacingBet ? 'vs_RFI' : 'RFI';
+    const bigBlindVal = gameState.bigBlind || 20;
     
+    // Find the highest bet made by any OTHER player
+    let raiser = null;
+    let maxOtherBet = 0;
+    if (gameState.players) {
+      gameState.players.forEach(p => {
+        if (p.isActive && !p.hasFolded && p.id !== activePlayer.id) {
+          if (p.bet > maxOtherBet) {
+            maxOtherBet = p.bet;
+            raiser = p;
+          }
+        }
+      });
+    }
+
     // Convert hole cards to grid coordinates to find baseline weights
     const card1 = cards[0];
     const card2 = cards[1];
@@ -200,60 +238,109 @@ export function getGTOAdvice(gameState) {
       handKey = (RANK_CHARS.indexOf(r1) > RANK_CHARS.indexOf(r2) ? r1 + r2 : r2 + r1) + 'o';
     }
 
+    // Situation determination
+    let situation = 'RFI';
+    if (raiser && maxOtherBet > bigBlindVal) {
+      const raiserPos = normalizePosition(raiser.position);
+      situation = `vs_${raiserPos}`;
+    } else if (raiser && maxOtherBet === bigBlindVal && normalizePosition(position) === 'BB') {
+      situation = 'vs_SB';
+    } else if (raiser && maxOtherBet === bigBlindVal) {
+      const raiserPos = normalizePosition(raiser.position);
+      situation = `vs_${raiserPos}`;
+    }
+
+    // Normalize active position
+    const normActivePos = normalizePosition(position);
+    const posData = PREFLOP_DATA[normActivePos];
+    let sitData = null;
+    if (posData) {
+      sitData = posData[situation] || posData['RFI'];
+    }
+
     // Default preflop action mapping
-    let raiseWeight = 0, callWeight = 0, foldWeight = 100;
-    
-    // We import PREFLOP_DATA structures dynamically here
-    // Let's analyze and assign weights
-    const posObj = position === 'Hero' ? 'BTN' : position; // default Hero as BTN if undefined
-    
-    // Basic preflop strategy rules as heuristics if not fully parsed
-    if (['AA', 'KK', 'QQ', 'JJ', 'AKs', 'AKo'].includes(handKey)) {
-      raiseWeight = 100; foldWeight = 0;
-    } else if (['TT', '99', '88', 'AQs', 'AQo', 'AJs', 'KQs'].includes(handKey)) {
-      raiseWeight = 80; callWeight = 20; foldWeight = 0;
-    } else if (['77', '66', '55', 'ATs', 'KJs', 'QJs', 'JTs', 'AJo', 'KQo'].includes(handKey)) {
-      if (situation === 'RFI') {
-        raiseWeight = 60; foldWeight = 40;
-      } else {
-        callWeight = 40; foldWeight = 60;
+    let raiseWeight = 0, callWeight = 0, checkWeight = 0, foldWeight = 100;
+
+    if (sitData) {
+      const raiseSet = parseRangeFormula(sitData.raise || '');
+      const raiseMixSet = parseRangeFormula(sitData.raise_mix || '');
+      const callSet = parseRangeFormula(sitData.call || '');
+      const callMixSet = parseRangeFormula(sitData.call_mix || '');
+      const checkSet = parseRangeFormula(sitData.check || '');
+      const checkMixSet = parseRangeFormula(sitData.check_mix || '');
+
+      if (raiseSet.has(handKey)) {
+        raiseWeight = 100;
+        foldWeight = 0;
+      } else if (raiseMixSet.has(handKey)) {
+        raiseWeight = 50;
+        foldWeight = 50;
+      } else if (callSet.has(handKey)) {
+        callWeight = 100;
+        foldWeight = 0;
+      } else if (callMixSet.has(handKey)) {
+        callWeight = 50;
+        foldWeight = 50;
+      } else if (checkSet.has(handKey)) {
+        checkWeight = 100;
+        foldWeight = 0;
+      } else if (checkMixSet.has(handKey)) {
+        checkWeight = 50;
+        foldWeight = 50;
       }
-    } else if (['A9s-A2s', 'K9s', 'T9s', '98s', '87s'].some(p => handKey.includes('s'))) {
-      if (situation === 'RFI') {
-        raiseWeight = 30; foldWeight = 70;
-      } else {
-        foldWeight = 100;
+    } else {
+      // Basic fallback heuristics if sitData is missing
+      if (['AA', 'KK', 'QQ', 'JJ', 'AKs', 'AKo'].includes(handKey)) {
+        raiseWeight = 100; foldWeight = 0;
+      } else if (['TT', '99', '88', 'AQs', 'AQo', 'AJs', 'KQs'].includes(handKey)) {
+        raiseWeight = 80; callWeight = 20; foldWeight = 0;
+      } else if (['77', '66', '55', 'ATs', 'KJs', 'QJs', 'JTs', 'AJo', 'KQo'].includes(handKey)) {
+        if (situation === 'RFI') {
+          raiseWeight = 60; foldWeight = 40;
+        } else {
+          callWeight = 40; foldWeight = 60;
+        }
       }
     }
 
-    const recAction = raiseWeight > 50 ? 'RAISE' : (callWeight > 50 ? 'CALL' : 'FOLD');
+    const recAction = raiseWeight >= 50 ? 'RAISE' : (callWeight >= 50 ? 'CALL' : (checkWeight >= 50 ? 'CHECK' : 'FOLD'));
     
-    let comm = `### Preflop Strategy: **${position}** with **${handKey}**\n\n`;
-    if (situation === 'RFI') {
-      comm += `You are first to act or facing folded action (**Raise First In**). \n\n`;
-      if (recAction === 'RAISE') {
-        comm += `* **Action**: **Open Raise (2.5x BB)**\n`;
-        comm += `* **Why**: ${handKey} is in the top tier of starting hands and plays extremely well. Open raising is mandatory to build a pot and capitalize on preflop equity.`;
+    let comm = `### Preflop GTO Strategy: **${position}** with **${handKey}**\n\n`;
+    comm += `* **Position**: **${position}** (Normalized: ${normActivePos})\n`;
+    comm += `* **Situation**: **${situation === 'RFI' ? 'Raise First In (RFI)' : `Facing action from ${situation.replace('vs_', '')}`}**\n\n`;
+    
+    comm += `#### Recommended Action Weights:\n`;
+    comm += `* 🔴 **Raise / 3-Bet**: **${raiseWeight}%**\n`;
+    if (callWeight > 0) comm += `* 🔵 **Call**: **${callWeight}%**\n`;
+    if (checkWeight > 0) comm += `* 🟢 **Check**: **${checkWeight}%**\n`;
+    comm += `* ⚫ **Fold**: **${foldWeight}%**\n\n`;
+    
+    comm += `#### Strategic Rationale:\n`;
+    if (recAction === 'RAISE') {
+      if (situation === 'RFI') {
+        comm += `Based on solver-validated ranges, **${handKey}** is a clear **Open Raise** from **${position}**.\n\n`;
+        comm += `Raising to 2.2x - 2.5x BB is standard GTO play here to thin the field, build a pot with your premium equity, and realize fold equity.`;
       } else {
-        comm += `* **Action**: **Fold**\n`;
-        comm += `* **Why**: ${handKey} is too weak to play from this position. Folding is the highest expectation (EV) play to conserve chips.`;
+        comm += `Facing a raise from ${situation.replace('vs_', '')}, **${handKey}** is a strong candidate for a **3-Bet (Re-raise)**.\n\n`;
+        comm += `3-betting puts maximum pressure on the opener, allows you to take down the pot preflop, and builds a large pot when you have a premium holding.`;
       }
+    } else if (recAction === 'CALL') {
+      comm += `Based on solver-validated ranges, **${handKey}** is a **Call** from **${position}**.\n\n`;
+      comm += `This hand has excellent postflop playability, but re-raising would bloat the pot unnecessarily or isolate you against stronger hands. Calling allows you to realize your equity in position or close the action.`;
+    } else if (recAction === 'CHECK') {
+      comm += `Based on solver-validated ranges, **${handKey}** is a **Check**.\n\n`;
+      comm += `Since you are in the Big Blind and facing a complete/limp, checking is the standard GTO option to see a flop for free.`;
     } else {
-      comm += `You are facing a preflop raise. \n\n`;
-      if (recAction === 'RAISE') {
-        comm += `* **Action**: **3-Bet (Re-raise to 3x their bet)**\n`;
-        comm += `* **Why**: Your hand is strong enough to 3-bet for value. 3-betting thin-slices their ranges, blocks calls, and maximizes your position.`;
-      } else if (callWeight > 0) {
-        comm += `* **Action**: **Call**\n`;
-        comm += `* **Why**: This hand has reasonable playability but is too weak to re-raise. Calling allows you to see a flop cheaply with strong multi-way implied odds.`;
+      comm += `Based on solver-validated ranges, **${handKey}** is a **Fold**.\n\n`;
+      if (situation === 'RFI') {
+        comm += `This hand is too weak to open from **${position}**. Folding is the highest long-term EV option to conserve chips.`;
       } else {
-        comm += `* **Action**: **Fold**\n`;
-        comm += `* **Why**: Facing a raise, ${handKey} is dominated by the raiser's tight range. Folding prevents playing dominated postflop hands out of position.`;
+        comm += `Facing a raise from ${situation.replace('vs_', '')}, this hand is dominated by their opening range. Folding prevents tough postflop decisions where you would be playing with a negative expected value.`;
       }
     }
 
     return {
-      weights: { raise: raiseWeight, call: callWeight, check: 0, fold: foldWeight },
+      weights: { raise: raiseWeight, call: callWeight, check: checkWeight, fold: foldWeight },
       commentary: comm
     };
   }
@@ -267,7 +354,7 @@ export function getGTOAdvice(gameState) {
   let rationale = '';
 
   const { madeClass, drawClass } = classObj;
-  const isFacingBet = lastBet > 0;
+  const isFacingBet = currentBet > activePlayer.bet;
 
   // Let's decide GTO percentages based on hand class, draws, and board texture
   if (['Royal Flush', 'Straight Flush', 'Four of a Kind', 'Full House', 'Flush', 'Straight', 'Three of a Kind'].includes(madeClass)) {

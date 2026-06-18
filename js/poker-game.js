@@ -424,7 +424,9 @@ export class PokerGame {
       activePlayer: player,
       pot: this.pot + this.players.reduce((sum, p) => sum + p.bet, 0),
       lastBet: this.lastBet,
-      currentBet: this.currentBet
+      currentBet: this.currentBet,
+      players: this.players,
+      bigBlind: this.bigBlind
     };
   }
 }

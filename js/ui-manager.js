@@ -25,6 +25,13 @@ export class UIManager {
     this.manuallyRevealedPlayers = new Set(); // bot IDs manually clicked to reveal face-up
     this.coachUnlocked = false; // whether GTO advice blur is dissolved for current Hero turn
 
+    // --- Cinematic All-In Runout States ---
+    this.runoutAnimationActive = false;
+    this.runoutCurrentCardsCount = 0;
+    this.preActionSnapshot = null;
+    this.preRunoutState = null;
+    this.runoutTimeout = null;
+
     // --- Sound Synthesis Engine ---
     this.audio = new AudioManager();
   }
@@ -637,6 +644,9 @@ export class UIManager {
         const oldActiveIdx = this.game.activePlayerIdx;
 
         const engineAction = act;
+        this.preActionSnapshot = this.capturePreActionSnapshot();
+        this.preRunoutState = this.getPreRunoutState(this.preActionSnapshot, engineAction, amount, oldActiveIdx);
+
         this.game.processAction(engineAction, amount);
 
         this.checkStateChangesAndLog(oldStreet, oldActiveIdx);
@@ -753,10 +763,72 @@ export class UIManager {
     }
   }
 
+  capturePreActionSnapshot() {
+    return {
+      players: this.game.players.map(p => ({
+        id: p.id,
+        chips: p.chips,
+        bet: p.bet,
+        isActive: p.isActive,
+        hasFolded: p.hasFolded,
+        isSB: p.isSB,
+        isBB: p.isBB,
+        name: p.name,
+        position: p.position
+      })),
+      pot: this.game.pot,
+      currentBet: this.game.currentBet,
+      street: this.game.street
+    };
+  }
+
+  getPreRunoutState(snapshot, action, amount, activePlayerIdx) {
+    if (!snapshot) return null;
+    const players = snapshot.players.map(p => ({ ...p }));
+    const activePlayer = players[activePlayerIdx];
+    
+    if (activePlayer) {
+      if (action === 'fold') {
+        activePlayer.hasFolded = true;
+      } else if (action === 'check') {
+        // no change
+      } else if (action === 'call') {
+        const callDiff = snapshot.currentBet - activePlayer.bet;
+        const callVal = Math.min(callDiff, activePlayer.chips);
+        activePlayer.chips -= callVal;
+        activePlayer.bet += callVal;
+      } else if (action === 'raise') {
+        const raiseDiff = amount - activePlayer.bet;
+        const raiseVal = Math.min(raiseDiff, activePlayer.chips);
+        activePlayer.chips -= raiseVal;
+        activePlayer.bet += raiseVal;
+      } else if (action === 'allin') {
+        const allinAmt = activePlayer.chips + activePlayer.bet;
+        activePlayer.chips = 0;
+        activePlayer.bet = allinAmt;
+      }
+    }
+
+    const totalPot = snapshot.pot + players.reduce((sum, p) => sum + p.bet, 0);
+    players.forEach(p => {
+      p.bet = 0;
+    });
+
+    return {
+      players,
+      pot: totalPot
+    };
+  }
+
   initiateHandAndLog() {
+    if (this.runoutTimeout) {
+      clearTimeout(this.runoutTimeout);
+      this.runoutTimeout = null;
+    }
+    this.runoutAnimationActive = false;
     this.isBotThinking = false;
     this.manuallyRevealedPlayers.clear();
-    this.coachUnlocked = false;
+    // this.coachUnlocked = false; // Keep coach state sticky across hands
     this.isStreetDealt = true;
     
     // Clear log box or append starting logs
@@ -805,21 +877,9 @@ export class UIManager {
 
       // Log runout intermediate streets if we went straight to showdown from a previous street
       if (currentStreet === 'showdown') {
-        if (oldStreet === 'preflop') {
-          const flopCards = this.game.communityCards.slice(0, 3).join(' ');
-          const turnCard = this.game.communityCards[3];
-          const riverCard = this.game.communityCards[4];
-          this.addLogEntry(`--- Runout Flop: [${flopCards}] ---`, 'street');
-          this.addLogEntry(`--- Runout Turn: [${turnCard}] ---`, 'street');
-          this.addLogEntry(`--- Runout River: [${riverCard}] ---`, 'street');
-        } else if (oldStreet === 'flop') {
-          const turnCard = this.game.communityCards[3];
-          const riverCard = this.game.communityCards[4];
-          this.addLogEntry(`--- Runout Turn: [${turnCard}] ---`, 'street');
-          this.addLogEntry(`--- Runout River: [${riverCard}] ---`, 'street');
-        } else if (oldStreet === 'turn') {
-          const riverCard = this.game.communityCards[4];
-          this.addLogEntry(`--- Runout River: [${riverCard}] ---`, 'street');
+        if (oldStreet === 'preflop' || oldStreet === 'flop' || oldStreet === 'turn') {
+          this.startAllInRunoutAnimation(oldStreet);
+          return;
         }
         
         this.addLogEntry(`--- Showdown ---`, 'street');
@@ -843,8 +903,68 @@ export class UIManager {
 
     // 2. Check if turn transitioned back to Hero
     if (oldActivePlayerIdx !== 0 && this.game.activePlayerIdx === 0) {
-      this.coachUnlocked = false;
+      // this.coachUnlocked = false; // Keep coach state sticky across turns
     }
+  }
+
+  startAllInRunoutAnimation(oldStreet) {
+    this.runoutAnimationActive = true;
+    this.isBotThinking = true; // Block action buttons
+    this.updateActionDashboard();
+
+    let timeline = [];
+
+    if (oldStreet === 'preflop') {
+      timeline.push({ cardsCount: 3, label: 'Flop', logText: `--- Runout Flop: [${this.game.communityCards.slice(0, 3).join(' ')}] ---` });
+      timeline.push({ cardsCount: 4, label: 'Turn', logText: `--- Runout Turn: [${this.game.communityCards[3]}] ---` });
+      timeline.push({ cardsCount: 5, label: 'River', logText: `--- Runout River: [${this.game.communityCards[4]}] ---` });
+    } else if (oldStreet === 'flop') {
+      timeline.push({ cardsCount: 4, label: 'Turn', logText: `--- Runout Turn: [${this.game.communityCards[3]}] ---` });
+      timeline.push({ cardsCount: 5, label: 'River', logText: `--- Runout River: [${this.game.communityCards[4]}] ---` });
+    } else if (oldStreet === 'turn') {
+      timeline.push({ cardsCount: 5, label: 'River', logText: `--- Runout River: [${this.game.communityCards[4]}] ---` });
+    }
+
+    if (oldStreet === 'preflop') {
+      this.runoutCurrentCardsCount = 0;
+    } else if (oldStreet === 'flop') {
+      this.runoutCurrentCardsCount = 3;
+    } else if (oldStreet === 'turn') {
+      this.runoutCurrentCardsCount = 4;
+    }
+
+    this.addLogEntry('💥 All-In Showdown! Opponents reveal cards. Runout begins...', 'gto');
+    this.audio.playChip(); // dramatic chips / showdown sound
+    this.isStreetDealt = true;
+    this.renderPokerTable();
+
+    let stepIdx = 0;
+
+    const nextStep = () => {
+      if (stepIdx < timeline.length) {
+        const step = timeline[stepIdx];
+        this.runoutCurrentCardsCount = step.cardsCount;
+        this.addLogEntry(step.logText, 'street');
+        this.audio.playCardDeal();
+        this.isStreetDealt = true;
+        this.renderPokerTable();
+        
+        stepIdx++;
+        this.runoutTimeout = setTimeout(nextStep, 1000);
+      } else {
+        this.runoutAnimationActive = false;
+        this.isBotThinking = false;
+        this.runoutTimeout = null;
+        
+        this.addLogEntry(`--- Showdown ---`, 'street');
+        this.logShowdownResults();
+        
+        this.renderPokerTable();
+        this.updateGTORecommendations();
+      }
+    };
+
+    this.runoutTimeout = setTimeout(nextStep, 1000);
   }
 
   logShowdownResults() {
@@ -1008,11 +1128,16 @@ export class UIManager {
     const oldStreet = this.game.street;
     const oldActiveIdx = this.game.activePlayerIdx;
 
+    this.preActionSnapshot = this.capturePreActionSnapshot();
+    this.preRunoutState = this.getPreRunoutState(this.preActionSnapshot, actionChosen, amount, oldActiveIdx);
+
     this.game.processAction(actionChosen, amount);
     
     this.checkStateChangesAndLog(oldStreet, oldActiveIdx);
 
-    this.isBotThinking = false;
+    if (!this.runoutAnimationActive) {
+      this.isBotThinking = false;
+    }
 
     // 5. Render and continue loops
     this.renderPokerTable();
@@ -1104,9 +1229,9 @@ export class UIManager {
         const revealToggle = document.getElementById('toggle-reveal-opponent-cards');
         const revealEnabled = revealToggle ? revealToggle.checked : false;
         
-        // Face down condition: is bot AND God Mode is off AND hasn't been manually peeking-revealed
+        // Face down condition: is bot AND God Mode is off AND hasn't been manually peeking-revealed AND not active runout animation
         const isManuallyRevealed = this.manuallyRevealedPlayers.has(p.id);
-        const isFaceDown = p.id !== 0 && this.game.street !== 'showdown' && !revealEnabled && !isManuallyRevealed;
+        const isFaceDown = p.id !== 0 && this.game.street !== 'showdown' && !revealEnabled && !isManuallyRevealed && !this.runoutAnimationActive;
 
         // Use staggered delay indices only on fresh street/hand dealing triggers
         const staggerIdx = this.isStreetDealt ? p.id : null;
@@ -1120,6 +1245,11 @@ export class UIManager {
 
         const actionText = p.hasFolded ? 'FOLDED' : (p.hasActed && p.bet > 0 ? 'BETTING' : '');
 
+        const pState = this.runoutAnimationActive && this.preRunoutState 
+          ? this.preRunoutState.players.find(ps => ps.id === p.id)
+          : null;
+        const playerChips = pState ? pState.chips : p.chips;
+
         seatDiv.innerHTML = `
           <div class="seat-card">
             <div class="seat-name">${p.name} <span style="font-size: 0.65rem; color: var(--text-secondary)">(${p.position})</span></div>
@@ -1127,7 +1257,7 @@ export class UIManager {
               ${card1Html}
               ${card2Html}
             </div>
-            <div class="seat-chips">$${p.chips}</div>
+            <div class="seat-chips">$${playerChips}</div>
             ${actionText ? `<div class="seat-action-label ${actionText.toLowerCase()}">${actionText}</div>` : ''}
           </div>
         `;
@@ -1189,7 +1319,7 @@ export class UIManager {
       }
 
       // Render Current bet chips indicator
-      if (p.isActive && p.bet > 0) {
+      if (p.isActive && p.bet > 0 && !this.runoutAnimationActive) {
         const betDiv = document.createElement('div');
         
         let colorClass = 'chip-red';
@@ -1213,9 +1343,26 @@ export class UIManager {
     if (commContainer) {
       commContainer.innerHTML = '';
       for (let i = 0; i < 5; i++) {
-        const cCard = this.game.communityCards[i];
+        let cCard = this.game.communityCards[i];
+        if (this.runoutAnimationActive && i >= this.runoutCurrentCardsCount) {
+          cCard = null; // Hide future community cards during active runout animation
+        }
         if (cCard) {
-          const staggerIdx = this.isStreetDealt ? i : null;
+          let staggerIdx = null;
+          if (this.isStreetDealt) {
+            if (this.runoutAnimationActive) {
+              // During runout animation, only animate the newly dealt cards on this step
+              if (this.runoutCurrentCardsCount === 3 && i < 3) {
+                staggerIdx = i; // Flop cards animate
+              } else if (this.runoutCurrentCardsCount === 4 && i === 3) {
+                staggerIdx = 0; // Turn card animates immediately
+              } else if (this.runoutCurrentCardsCount === 5 && i === 4) {
+                staggerIdx = 0; // River card animates immediately
+              }
+            } else {
+              staggerIdx = i;
+            }
+          }
           commContainer.innerHTML += this.renderCardHtml(cCard, null, i, false, staggerIdx);
         } else {
           commContainer.innerHTML += `<div class="poker-card-wrapper empty-slot" data-slot="${i}"></div>`;
@@ -1234,7 +1381,10 @@ export class UIManager {
     // 3. Render Pot display
     const potEl = document.getElementById('felt-pot-value');
     if (potEl) {
-      potEl.textContent = `$${this.game.pot + this.game.players.reduce((sum, p) => sum + p.bet, 0)}`;
+      const potVal = this.runoutAnimationActive && this.preRunoutState
+        ? this.preRunoutState.pot
+        : (this.game.pot + this.game.players.reduce((sum, p) => sum + p.bet, 0));
+      potEl.textContent = `$${potVal}`;
     }
 
     // 4. Highlight action dashboard buttons
